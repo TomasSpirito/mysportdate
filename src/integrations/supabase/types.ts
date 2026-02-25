@@ -14,16 +14,274 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      addons: {
+        Row: {
+          facility_id: string
+          icon: string
+          id: string
+          name: string
+          price: number
+          requires_stock: boolean
+        }
+        Insert: {
+          facility_id: string
+          icon?: string
+          id?: string
+          name: string
+          price?: number
+          requires_stock?: boolean
+        }
+        Update: {
+          facility_id?: string
+          icon?: string
+          id?: string
+          name?: string
+          price?: number
+          requires_stock?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "addons_facility_id_fkey"
+            columns: ["facility_id"]
+            isOneToOne: false
+            referencedRelation: "facilities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      booking_addons: {
+        Row: {
+          addon_id: string
+          booking_id: string
+          id: string
+        }
+        Insert: {
+          addon_id: string
+          booking_id: string
+          id?: string
+        }
+        Update: {
+          addon_id?: string
+          booking_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_addons_addon_id_fkey"
+            columns: ["addon_id"]
+            isOneToOne: false
+            referencedRelation: "addons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_addons_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bookings: {
+        Row: {
+          booking_type: string
+          court_id: string
+          created_at: string
+          deposit_amount: number
+          end_time: string
+          id: string
+          payment_status: string
+          start_time: string
+          status: string
+          total_price: number
+          user_id: string | null
+          user_name: string | null
+        }
+        Insert: {
+          booking_type?: string
+          court_id: string
+          created_at?: string
+          deposit_amount?: number
+          end_time: string
+          id?: string
+          payment_status?: string
+          start_time: string
+          status?: string
+          total_price?: number
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Update: {
+          booking_type?: string
+          court_id?: string
+          created_at?: string
+          deposit_amount?: number
+          end_time?: string
+          id?: string
+          payment_status?: string
+          start_time?: string
+          status?: string
+          total_price?: number
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookings_court_id_fkey"
+            columns: ["court_id"]
+            isOneToOne: false
+            referencedRelation: "courts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      courts: {
+        Row: {
+          created_at: string
+          facility_id: string
+          features: string[] | null
+          id: string
+          image: string | null
+          name: string
+          price_per_hour: number
+          sport_id: string
+          surface: string | null
+        }
+        Insert: {
+          created_at?: string
+          facility_id: string
+          features?: string[] | null
+          id?: string
+          image?: string | null
+          name: string
+          price_per_hour?: number
+          sport_id: string
+          surface?: string | null
+        }
+        Update: {
+          created_at?: string
+          facility_id?: string
+          features?: string[] | null
+          id?: string
+          image?: string | null
+          name?: string
+          price_per_hour?: number
+          sport_id?: string
+          surface?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "courts_facility_id_fkey"
+            columns: ["facility_id"]
+            isOneToOne: false
+            referencedRelation: "facilities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "courts_sport_id_fkey"
+            columns: ["sport_id"]
+            isOneToOne: false
+            referencedRelation: "sports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      facilities: {
+        Row: {
+          close_time: string
+          created_at: string
+          id: string
+          location: string | null
+          name: string
+          open_time: string
+          owner_id: string | null
+        }
+        Insert: {
+          close_time?: string
+          created_at?: string
+          id?: string
+          location?: string | null
+          name: string
+          open_time?: string
+          owner_id?: string | null
+        }
+        Update: {
+          close_time?: string
+          created_at?: string
+          id?: string
+          location?: string | null
+          name?: string
+          open_time?: string
+          owner_id?: string | null
+        }
+        Relationships: []
+      }
+      sports: {
+        Row: {
+          icon: string
+          id: string
+          name: string
+        }
+        Insert: {
+          icon?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          icon?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          facility_id: string | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          facility_id?: string | null
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          facility_id?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_facility_id_fkey"
+            columns: ["facility_id"]
+            isOneToOne: false
+            referencedRelation: "facilities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      is_facility_admin: {
+        Args: { _facility_id: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "player"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +408,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "player"],
+    },
   },
 } as const
