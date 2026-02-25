@@ -1,11 +1,12 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { sports } from "@/data/mock-data";
+import { useSports } from "@/hooks/use-supabase-data";
 import PlayerLayout from "@/components/layout/PlayerLayout";
 import { MapPin, Shield } from "lucide-react";
 
 const Index = () => {
   const navigate = useNavigate();
+  const { data: sports = [], isLoading } = useSports();
 
   return (
     <PlayerLayout>
@@ -31,22 +32,30 @@ const Index = () => {
 
       {/* Sport selection */}
       <section className="container -mt-5">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {sports.map((sport, i) => (
-            <motion.button
-              key={sport.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.1, duration: 0.4 }}
-              onClick={() => navigate(`/courts/${sport.id}`)}
-              className="glass-card rounded-2xl p-6 text-left hover:shadow-xl hover:scale-[1.02] transition-all group"
-            >
-              <span className="text-4xl block mb-3">{sport.icon}</span>
-              <h3 className="font-bold text-lg text-foreground">{sport.name}</h3>
-              <p className="text-sm text-muted-foreground mt-1">Ver canchas disponibles →</p>
-            </motion.button>
-          ))}
-        </div>
+        {isLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="glass-card rounded-2xl p-6 animate-pulse h-32" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {sports.map((sport, i) => (
+              <motion.button
+                key={sport.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.1, duration: 0.4 }}
+                onClick={() => navigate(`/courts/${sport.id}`)}
+                className="glass-card rounded-2xl p-6 text-left hover:shadow-xl hover:scale-[1.02] transition-all group"
+              >
+                <span className="text-4xl block mb-3">{sport.icon}</span>
+                <h3 className="font-bold text-lg text-foreground">{sport.name}</h3>
+                <p className="text-sm text-muted-foreground mt-1">Ver canchas disponibles →</p>
+              </motion.button>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Features */}

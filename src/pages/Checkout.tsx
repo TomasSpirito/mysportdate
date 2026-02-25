@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { format, parse } from "date-fns";
 import { es } from "date-fns/locale";
-import { courts, addons } from "@/data/mock-data";
+import { useCourt, useAddons } from "@/hooks/use-supabase-data";
 import PlayerLayout from "@/components/layout/PlayerLayout";
 import { cn } from "@/lib/utils";
 import { Check, MapPin, Clock, CreditCard } from "lucide-react";
@@ -14,7 +14,8 @@ const Checkout = () => {
   const courtId = params.get("court");
   const date = params.get("date");
   const time = params.get("time");
-  const court = courts.find((c) => c.id === courtId);
+  const { data: court } = useCourt(courtId || undefined);
+  const { data: addons = [] } = useAddons();
   const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
   const [payDeposit, setPayDeposit] = useState(true);
 
@@ -24,9 +25,9 @@ const Checkout = () => {
 
   const addonsTotal = useMemo(
     () => addons.filter((a) => selectedAddons.includes(a.id)).reduce((sum, a) => sum + a.price, 0),
-    [selectedAddons]
+    [selectedAddons, addons]
   );
-  const total = (court?.pricePerHour || 0) + addonsTotal;
+  const total = (court?.price_per_hour || 0) + addonsTotal;
   const depositAmount = Math.round(total * 0.4);
 
   if (!court || !date || !time) return null;

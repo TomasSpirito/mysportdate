@@ -1,11 +1,14 @@
 import { useState } from "react";
 import AdminLayout from "@/components/layout/AdminLayout";
-import { courts, sports, addons } from "@/data/mock-data";
+import { useCourts, useSports, useAddons } from "@/hooks/use-supabase-data";
 import { cn } from "@/lib/utils";
 import { Plus, Edit2, Trash2, Trophy, Settings } from "lucide-react";
 
 const AdminCourts = () => {
   const [activeTab, setActiveTab] = useState<"courts" | "sports" | "addons">("courts");
+  const { data: courts = [] } = useCourts();
+  const { data: sports = [] } = useSports();
+  const { data: addons = [] } = useAddons();
 
   return (
     <AdminLayout>
@@ -45,7 +48,7 @@ const AdminCourts = () => {
           </div>
           <div className="space-y-3">
             {courts.map((court) => {
-              const sport = sports.find((s) => s.id === court.sportId);
+              const sport = sports.find((s) => s.id === court.sport_id);
               return (
                 <div key={court.id} className="glass-card rounded-2xl p-5 flex items-start gap-4">
                   <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center text-2xl">{sport?.icon}</div>
@@ -59,7 +62,7 @@ const AdminCourts = () => {
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="font-extrabold text-primary">${court.pricePerHour.toLocaleString()}</p>
+                    <p className="font-extrabold text-primary">${court.price_per_hour.toLocaleString()}</p>
                     <p className="text-[10px] text-muted-foreground">/hora</p>
                     <div className="flex gap-1 mt-2">
                       <button className="p-1.5 rounded-lg border border-border hover:bg-muted transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
@@ -83,7 +86,7 @@ const AdminCourts = () => {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {sports.map((sport) => {
-              const sportCourts = courts.filter((c) => c.sportId === sport.id);
+              const sportCourts = courts.filter((c) => c.sport_id === sport.id);
               return (
                 <div key={sport.id} className="glass-card rounded-2xl p-5 flex items-center gap-4">
                   <span className="text-4xl">{sport.icon}</span>
