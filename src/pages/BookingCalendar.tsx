@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { format, addDays } from "date-fns";
 import { es } from "date-fns/locale";
-import { courts, generateTimeSlots } from "@/data/mock-data";
+import { useCourt, useBookingsByCourt, generateAvailableSlots } from "@/hooks/use-supabase-data";
 import PlayerLayout from "@/components/layout/PlayerLayout";
 import { cn } from "@/lib/utils";
 import { Calendar, Clock } from "lucide-react";
@@ -11,7 +11,7 @@ import { Calendar, Clock } from "lucide-react";
 const BookingCalendar = () => {
   const { courtId } = useParams();
   const navigate = useNavigate();
-  const court = courts.find((c) => c.id === courtId);
+  const { data: court, isLoading: loadingCourt } = useCourt(courtId);
 
   const today = new Date();
   const dates = Array.from({ length: 14 }, (_, i) => addDays(today, i));
@@ -19,9 +19,12 @@ const BookingCalendar = () => {
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
 
   const dateStr = format(selectedDate, "yyyy-MM-dd");
-  const slots = useMemo(() => generateTimeSlots(courtId || "", dateStr), [courtId, dateStr]);
+  const { data: bookings = [] } = useBookingsByCourt(courtId, dateStr);
+
+  const slots = useMemo(() => generateAvailableSlots(bookings, dateStr), [bookings, dateStr]);
   const availableSlots = slots.filter((s) => s.available);
 
+  if (loadingCourt) return <PlayerLayout><div className="container py-10 text-center text-muted-foreground">Cargando...</div></PlayerLayout>;
   if (!court) return null;
 
   const handleConfirm = () => {
@@ -35,10 +38,10 @@ const BookingCalendar = () => {
   };
 
   return (
-    <PlayerLayout showBack backTo={`/courts/${court.sportId}`} title={court.name}>
+    <PlayerLayout showBack backTo={`/courts/${court.sport_id}`} title={court.name}>
       <div className="container py-6">
         <h2 className="text-xl font-extrabold mb-1">{court.name}</h2>
-        <p className="text-sm text-muted-foreground mb-5">${court.pricePerHour.toLocaleString()}/hora • {court.surface}</p>
+        <p className="text-sm text-muted-foreground mb-5">${court.price_per_hour.toLocaleString()}/hora • {court.surface}</p>
 
         {/* Date selector */}
         <div className="mb-6">
@@ -112,7 +115,7 @@ const BookingCalendar = () => {
             <div className="container flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground">{format(selectedDate, "EEEE d 'de' MMMM", { locale: es })}</p>
-                <p className="font-bold">{selectedTime} hs • ${court.pricePerHour.toLocaleString()}</p>
+                <p className="font-bold">{selectedTime} hs • ${court.price_per_hour.toLocaleString()}</p>
               </div>
               <button onClick={handleConfirm} className="bg-primary text-primary-foreground px-6 py-3 rounded-xl font-bold text-sm hover:opacity-90 transition-opacity">
                 Continuar

@@ -1,9 +1,21 @@
 import AdminLayout from "@/components/layout/AdminLayout";
-import { dailyStats, mockBookings } from "@/data/mock-data";
+import { useBookings } from "@/hooks/use-supabase-data";
+import { useMemo } from "react";
+import { format } from "date-fns";
 import { DollarSign, TrendingUp, CreditCard, AlertCircle } from "lucide-react";
 
 const AdminCash = () => {
-  const partialBookings = mockBookings.filter((b) => b.paymentStatus === "partial");
+  const today = format(new Date(), "yyyy-MM-dd");
+  const { data: bookings = [] } = useBookings(today);
+
+  const stats = useMemo(() => {
+    const totalRevenue = bookings.reduce((s, b) => s + b.total_price, 0);
+    const totalDeposits = bookings.reduce((s, b) => s + b.deposit_amount, 0);
+    const pendingPayments = totalRevenue - totalDeposits;
+    return { totalBookings: bookings.length, totalRevenue, totalDeposits, pendingPayments };
+  }, [bookings]);
+
+  const partialBookings = bookings.filter((b) => b.payment_status === "partial");
 
   return (
     <AdminLayout>
@@ -15,10 +27,10 @@ const AdminCash = () => {
       {/* Summary cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
         {[
-          { label: "Recaudado total", value: dailyStats.totalRevenue, icon: DollarSign, color: "text-primary" },
-          { label: "Señas cobradas", value: dailyStats.totalDeposits, icon: CreditCard, color: "text-primary" },
-          { label: "Pagos pendientes", value: dailyStats.pendingPayments, icon: AlertCircle, color: "text-accent" },
-          { label: "Reservas hoy", value: dailyStats.totalBookings, icon: TrendingUp, color: "text-info", isCurrency: false },
+          { label: "Recaudado total", value: stats.totalRevenue, icon: DollarSign, color: "text-primary" },
+          { label: "Señas cobradas", value: stats.totalDeposits, icon: CreditCard, color: "text-primary" },
+          { label: "Pagos pendientes", value: stats.pendingPayments, icon: AlertCircle, color: "text-accent" },
+          { label: "Reservas hoy", value: stats.totalBookings, icon: TrendingUp, color: "text-info", isCurrency: false },
         ].map((card) => (
           <div key={card.label} className="glass-card rounded-2xl p-5">
             <div className="flex items-center gap-2 mb-2">
@@ -44,12 +56,14 @@ const AdminCash = () => {
           {partialBookings.map((b) => (
             <div key={b.id} className="glass-card rounded-2xl p-4 flex items-center gap-4">
               <div className="flex-1">
-                <p className="font-semibold text-sm">{b.userName}</p>
-                <p className="text-xs text-muted-foreground">{b.courtName} • {b.startTime} - {b.endTime}</p>
+                <p className="font-semibold text-sm">{b.user_name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {format(new Date(b.start_time), "HH:mm")} - {format(new Date(b.end_time), "HH:mm")}
+                </p>
               </div>
               <div className="text-right">
                 <p className="text-xs text-muted-foreground">Resta</p>
-                <p className="font-extrabold text-accent">${(b.totalPrice - b.depositAmount).toLocaleString()}</p>
+                <p className="font-extrabold text-accent">${(b.total_price - b.deposit_amount).toLocaleString()}</p>
               </div>
               <button className="bg-primary text-primary-foreground px-4 py-2 rounded-xl text-xs font-bold hover:opacity-90 transition-opacity">
                 Cobrar
@@ -62,12 +76,12 @@ const AdminCash = () => {
       {/* All today's transactions */}
       <h2 className="font-bold text-lg mt-8 mb-3">Movimientos de hoy</h2>
       <div className="space-y-2">
-        {mockBookings.map((b) => (
+        {bookings.map((b) => (
           <div key={b.id} className="flex items-center gap-3 p-3 rounded-xl bg-muted/50 text-sm">
-            <div className={`w-2 h-2 rounded-full ${b.paymentStatus === "full" ? "bg-primary" : b.paymentStatus === "partial" ? "bg-accent" : "bg-destructive"}`} />
-            <span className="flex-1 font-medium">{b.userName}</span>
-            <span className="text-muted-foreground">{b.startTime}</span>
-            <span className="font-bold">${b.depositAmount.toLocaleString()}</span>
+            <div className={`w-2 h-2 rounded-full ${b.payment_status === "full" ? "bg-primary" : b.payment_status === "partial" ? "bg-accent" : "bg-destructive"}`} />
+            <span className="flex-1 font-medium">{b.user_name}</span>
+            <span className="text-muted-foreground">{format(new Date(b.start_time), "HH:mm")}</span>
+            <span className="font-bold">${b.deposit_amount.toLocaleString()}</span>
           </div>
         ))}
       </div>

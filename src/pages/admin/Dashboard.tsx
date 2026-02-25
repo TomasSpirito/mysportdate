@@ -1,6 +1,6 @@
 import { useState } from "react";
 import AdminLayout from "@/components/layout/AdminLayout";
-import { courts, mockBookings, type Booking } from "@/data/mock-data";
+import { useCourts, useBookings, type Booking } from "@/hooks/use-supabase-data";
 import { cn } from "@/lib/utils";
 import { format, addDays } from "date-fns";
 import { es } from "date-fns/locale";
@@ -14,16 +14,22 @@ const AdminDashboard = () => {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
 
   const dateStr = format(selectedDate, "yyyy-MM-dd");
-  const bookingsForDate = mockBookings.filter((b) => b.date === dateStr);
+  const { data: courts = [] } = useCourts();
+  const { data: bookings = [] } = useBookings(dateStr);
 
   const getBooking = (courtId: string, hour: string) =>
-    bookingsForDate.find((b) => b.courtId === courtId && b.startTime === hour);
+    bookings.find((b) => {
+      const bHour = new Date(b.start_time).getUTCHours();
+      return b.court_id === courtId && `${bHour.toString().padStart(2, "0")}:00` === hour;
+    });
+
+  const getCourtName = (courtId: string) => courts.find((c) => c.id === courtId)?.name || "";
 
   const getSlotStyle = (booking?: Booking) => {
     if (!booking) return "bg-slot-free border-slot-free-border hover:bg-primary/10 cursor-pointer";
-    if (booking.type === "fixed") return "bg-info text-info-foreground";
-    if (booking.type === "manual") return "bg-destructive text-destructive-foreground";
-    if (booking.paymentStatus === "full") return "bg-primary text-primary-foreground";
+    if (booking.booking_type === "fixed") return "bg-info text-info-foreground";
+    if (booking.booking_type === "manual") return "bg-destructive text-destructive-foreground";
+    if (booking.payment_status === "full") return "bg-primary text-primary-foreground";
     return "bg-slot-deposit text-slot-deposit-foreground";
   };
 
@@ -89,8 +95,8 @@ const AdminDashboard = () => {
                       >
                         {booking && (
                           <>
-                            <p className="font-semibold truncate">{booking.userName}</p>
-                            <p className="opacity-80">${booking.depositAmount.toLocaleString()} / ${booking.totalPrice.toLocaleString()}</p>
+                            <p className="font-semibold truncate">{booking.user_name}</p>
+                            <p className="opacity-80">${booking.deposit_amount.toLocaleString()} / ${booking.total_price.toLocaleString()}</p>
                           </>
                         )}
                       </button>
@@ -112,17 +118,22 @@ const AdminDashboard = () => {
               <button onClick={() => setSelectedBooking(null)} className="p-1 rounded-md hover:bg-muted"><X className="w-4 h-4" /></button>
             </div>
             <div className="space-y-3 text-sm">
-              <div className="flex justify-between"><span className="text-muted-foreground">Jugador</span><span className="font-semibold">{selectedBooking.userName}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Cancha</span><span className="font-semibold">{selectedBooking.courtName}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Horario</span><span className="font-semibold">{selectedBooking.startTime} - {selectedBooking.endTime}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Jugador</span><span className="font-semibold">{selectedBooking.user_name}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Cancha</span><span className="font-semibold">{getCourtName(selectedBooking.court_id)}</span></div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Horario</span>
+                <span className="font-semibold">
+                  {format(new Date(selectedBooking.start_time), "HH:mm")} - {format(new Date(selectedBooking.end_time), "HH:mm")}
+                </span>
+              </div>
               <div className="border-t border-border my-2" />
-              <div className="flex justify-between"><span className="text-muted-foreground">Total</span><span className="font-extrabold">${selectedBooking.totalPrice.toLocaleString()}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Pagado</span><span className="font-semibold text-primary">${selectedBooking.depositAmount.toLocaleString()}</span></div>
-              {selectedBooking.totalPrice > selectedBooking.depositAmount && (
-                <div className="flex justify-between"><span className="text-muted-foreground">Resta</span><span className="font-semibold text-accent">${(selectedBooking.totalPrice - selectedBooking.depositAmount).toLocaleString()}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Total</span><span className="font-extrabold">${selectedBooking.total_price.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Pagado</span><span className="font-semibold text-primary">${selectedBooking.deposit_amount.toLocaleString()}</span></div>
+              {selectedBooking.total_price > selectedBooking.deposit_amount && (
+                <div className="flex justify-between"><span className="text-muted-foreground">Resta</span><span className="font-semibold text-accent">${(selectedBooking.total_price - selectedBooking.deposit_amount).toLocaleString()}</span></div>
               )}
             </div>
-            {selectedBooking.paymentStatus === "partial" && (
+            {selectedBooking.payment_status === "partial" && (
               <button className="w-full mt-5 bg-primary text-primary-foreground py-3 rounded-xl font-bold text-sm hover:opacity-90 transition-opacity">
                 Cobrar resto en efectivo
               </button>
