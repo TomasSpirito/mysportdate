@@ -94,8 +94,10 @@ export type Database = {
           start_time: string
           status: string
           total_price: number
+          user_email: string | null
           user_id: string | null
           user_name: string | null
+          user_phone: string | null
         }
         Insert: {
           booking_type?: string
@@ -108,8 +110,10 @@ export type Database = {
           start_time: string
           status?: string
           total_price?: number
+          user_email?: string | null
           user_id?: string | null
           user_name?: string | null
+          user_phone?: string | null
         }
         Update: {
           booking_type?: string
@@ -122,8 +126,10 @@ export type Database = {
           start_time?: string
           status?: string
           total_price?: number
+          user_email?: string | null
           user_id?: string | null
           user_name?: string | null
+          user_phone?: string | null
         }
         Relationships: [
           {
@@ -268,6 +274,22 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_booking: {
+        Args: {
+          p_addon_ids?: string[]
+          p_booking_type?: string
+          p_court_id: string
+          p_deposit_amount: number
+          p_end_time: string
+          p_payment_status: string
+          p_start_time: string
+          p_total_price: number
+          p_user_email: string
+          p_user_name: string
+          p_user_phone: string
+        }
+        Returns: string
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
