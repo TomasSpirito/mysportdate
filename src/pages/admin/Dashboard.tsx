@@ -36,7 +36,8 @@ const AdminDashboard = () => {
   const getSlotStyle = (booking?: Booking) => {
     if (!booking) return "bg-slot-free border border-slot-free-border hover:bg-primary/10 cursor-pointer";
     if (booking.booking_type === "fixed") return "bg-info text-info-foreground";
-    if (booking.booking_type === "manual") return "bg-destructive text-destructive-foreground";
+    if (booking.booking_type === "manual" && booking.payment_status !== "full") return "bg-destructive text-destructive-foreground";
+    if (booking.booking_type === "manual" && booking.payment_status === "full") return "bg-primary text-primary-foreground";
     if (booking.payment_status === "full") return "bg-primary text-primary-foreground";
     return "bg-slot-deposit text-slot-deposit-foreground";
   };
@@ -80,8 +81,8 @@ const AdminDashboard = () => {
         user_email: manualForm.email.trim(),
         user_phone: manualForm.phone.trim(),
         total_price: price,
-        deposit_amount: price,
-        payment_status: "full",
+        deposit_amount: 0,
+        payment_status: "none",
         booking_type: "manual",
       });
       toast({ title: "Reserva manual creada" });
@@ -184,10 +185,10 @@ const AdminDashboard = () => {
                 <div className="flex justify-between"><span className="text-muted-foreground">Resta</span><span className="font-semibold text-accent">${(selectedBooking.total_price - selectedBooking.deposit_amount).toLocaleString()}</span></div>
               )}
             </div>
-            {selectedBooking.payment_status === "partial" && (
+            {(selectedBooking.payment_status === "partial" || selectedBooking.payment_status === "none") && (
               <button onClick={handleCollect} disabled={updateBooking.isPending}
                 className="w-full mt-5 bg-primary text-primary-foreground py-3 rounded-xl font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-50">
-                Cobrar resto en efectivo
+                {selectedBooking.payment_status === "none" ? "Registrar pago completo" : "Cobrar resto en efectivo"}
               </button>
             )}
             <button onClick={handleCancel} disabled={deleteBooking.isPending}
