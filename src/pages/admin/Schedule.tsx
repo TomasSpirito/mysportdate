@@ -22,6 +22,12 @@ const AdminSchedule = () => {
   const [form, setForm] = useState({ court_id: "", days: [] as number[], hour: "20:00", name: "", phone: "", weeks: 8 });
   const [search, setSearch] = useState("");
 
+  const getCourtPrice = (id: string) => courts.find((c) => c.id === id)?.price_per_hour || 0;
+  const totalSessions = form.days.length * form.weeks;
+  const pricePerSession = getCourtPrice(form.court_id);
+  const totalPrice = totalSessions * pricePerSession;
+  const monthlyPrice = form.weeks >= 4 ? Math.round(totalPrice / (form.weeks / 4)) : totalPrice;
+
   const handleCreate = async () => {
     if (!form.court_id || !form.name.trim() || form.days.length === 0) {
       toast({ title: "Completá los campos y seleccioná al menos un día", variant: "destructive" });
@@ -45,7 +51,7 @@ const AdminSchedule = () => {
             await createBooking.mutateAsync({
               court_id: form.court_id, date: dateStr, time: form.hour,
               user_name: form.name.trim(), user_email: "", user_phone: form.phone.trim(),
-              total_price: 0, deposit_amount: 0, payment_status: "none", booking_type: "fixed",
+              total_price: pricePerSession, deposit_amount: 0, payment_status: "none", booking_type: "fixed",
             });
             created++;
           } catch {
@@ -153,6 +159,10 @@ const AdminSchedule = () => {
                   <p className="text-xs text-muted-foreground">{DAYS[dayOfWeek]} • {d.getUTCHours().toString().padStart(2, "0")}:00 hs</p>
                   <p className="text-xs text-muted-foreground">{getCourtName(g.booking.court_id)} • {g.count} semanas</p>
                 </div>
+                <div className="text-right mr-2">
+                  <p className="font-extrabold text-sm">${(g.booking.total_price * g.count).toLocaleString()}</p>
+                  <p className="text-[10px] text-muted-foreground">{g.booking.payment_status === "full" ? "Pagado" : "Pendiente"}</p>
+                </div>
                 <button onClick={() => handleDeleteFixed(g.booking)} className="p-2 rounded-lg border border-destructive/30 text-destructive hover:bg-destructive/10 transition-colors">
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -207,10 +217,20 @@ const AdminSchedule = () => {
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Cantidad de semanas</label>
                 <input type="number" min={1} max={52} className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-transparent outline-none focus:border-primary" value={form.weeks} onChange={(e) => setForm({ ...form, weeks: Number(e.target.value) })} />
               </div>
+              {/* Price summary */}
+              {form.court_id && form.days.length > 0 && (
+                <div className="bg-muted/50 rounded-xl p-4 space-y-1.5">
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Precio por turno</span><span className="font-semibold">${pricePerSession.toLocaleString()}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Turnos totales</span><span className="font-semibold">{totalSessions} ({form.days.length} días × {form.weeks} semanas)</span></div>
+                  <div className="border-t border-border my-1" />
+                  <div className="flex justify-between text-sm"><span className="font-semibold">Total a pagar</span><span className="font-extrabold text-primary">${totalPrice.toLocaleString()}</span></div>
+                  {form.weeks >= 4 && <div className="flex justify-between text-xs"><span className="text-muted-foreground">Equivalente mensual</span><span className="font-semibold text-info">${monthlyPrice.toLocaleString()}/mes</span></div>}
+                </div>
+              )}
             </div>
             <button onClick={handleCreate} disabled={createBooking.isPending}
               className="w-full mt-5 bg-primary text-primary-foreground py-3 rounded-xl font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-50">
-              {createBooking.isPending ? "Creando..." : "Crear turno fijo"}
+              {createBooking.isPending ? "Creando..." : `Crear turno fijo${totalPrice > 0 ? ` • $${totalPrice.toLocaleString()}` : ""}`}
             </button>
           </div>
         </div>

@@ -25,7 +25,7 @@ const AdminCash = () => {
     return { totalBookings: bookings.length, totalRevenue, totalDeposits, pendingPayments };
   }, [bookings]);
 
-  const partialBookings = bookings.filter((b) => b.payment_status === "partial");
+  const pendingBookings = bookings.filter((b) => b.payment_status === "partial" || b.payment_status === "none");
 
   const handleCollect = async (id: string, totalPrice: number) => {
     await updateBooking.mutateAsync({ id, payment_status: "full", deposit_amount: totalPrice });
@@ -78,19 +78,19 @@ const AdminCash = () => {
       </div>
 
       {/* Pending payments */}
-      {partialBookings.length > 0 && (
+      {pendingBookings.length > 0 && (
         <>
           <h2 className="font-bold text-lg mb-3">Pagos pendientes</h2>
           <div className="space-y-2 mb-8">
-            {partialBookings.map((b) => (
+            {pendingBookings.map((b) => (
               <div key={b.id} className="glass-card rounded-2xl p-4 flex items-center gap-4">
                 <div className="flex-1">
                   <p className="font-semibold text-sm">{b.user_name}</p>
                   <p className="text-xs text-muted-foreground">{getCourtName(b.court_id)} • {format(new Date(b.start_time), "HH:mm")} - {format(new Date(b.end_time), "HH:mm")}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs text-muted-foreground">Resta</p>
-                  <p className="font-extrabold text-accent">${(b.total_price - b.deposit_amount).toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">{b.payment_status === "none" ? "No pagado" : "Resta"}</p>
+                  <p className="font-extrabold text-accent">${(b.payment_status === "none" ? b.total_price : b.total_price - b.deposit_amount).toLocaleString()}</p>
                 </div>
                 <button onClick={() => handleCollect(b.id, b.total_price)} disabled={updateBooking.isPending}
                   className="bg-primary text-primary-foreground px-4 py-2 rounded-xl text-xs font-bold hover:opacity-90 transition-opacity disabled:opacity-50">
