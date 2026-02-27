@@ -57,7 +57,9 @@ const AdminCash = () => {
           </span>
           <button onClick={viewMode === "day" ? nextDay : nextMonth} className="p-2 rounded-lg border border-border hover:bg-muted transition-colors"><ChevronRight className="w-4 h-4" /></button>
         </div>
-        <button onClick={() => setSelectedDate(new Date())} className="text-xs text-primary font-semibold hover:underline ml-auto">Hoy</button>
+        <button onClick={() => setSelectedDate(new Date())} className="flex items-center gap-1.5 bg-primary text-primary-foreground px-3 py-1.5 rounded-full text-xs font-semibold hover:opacity-90 transition-opacity ml-auto">
+          <Calendar className="w-3.5 h-3.5" /> Hoy
+        </button>
       </div>
 
       {/* Summary cards */}
