@@ -1,7 +1,7 @@
 import AdminLayout from "@/components/layout/AdminLayout";
 import { useBookingsRange, useCourts, useSports } from "@/hooks/use-supabase-data";
 import { useMemo, useState } from "react";
-import { format, subDays, startOfWeek, addDays, getDay } from "date-fns";
+import { format, subDays, startOfWeek, startOfMonth, endOfMonth, addMonths, addDays, getDay } from "date-fns";
 import { es } from "date-fns/locale";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -13,8 +13,10 @@ const sportColors = ["hsl(152, 76%, 36%)", "hsl(24, 95%, 53%)", "hsl(210, 100%, 
 
 const AdminAnalytics = () => {
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const rangeStart = format(subDays(selectedDate, 30), "yyyy-MM-dd");
-  const rangeEnd = format(selectedDate, "yyyy-MM-dd");
+  const monthStart = format(startOfMonth(selectedDate), "yyyy-MM-dd");
+  const monthEnd = format(endOfMonth(selectedDate), "yyyy-MM-dd");
+  const rangeStart = monthStart;
+  const rangeEnd = monthEnd;
   const weekStart = format(subDays(selectedDate, 6), "yyyy-MM-dd");
 
   const { data: bookings = [] } = useBookingsRange(rangeStart, rangeEnd);
@@ -24,7 +26,8 @@ const AdminAnalytics = () => {
 
   const stats = useMemo(() => {
     const totalBookings = bookings.length;
-    const totalSlots = courts.length * 16 * 30;
+    const daysInMonth = endOfMonth(selectedDate).getDate();
+    const totalSlots = courts.length * 16 * daysInMonth;
     const occupancyRate = totalSlots > 0 ? Math.round((totalBookings / totalSlots) * 100) : 0;
     const totalRevenue = bookings.reduce((s, b) => s + b.total_price, 0);
 
@@ -86,9 +89,9 @@ const AdminAnalytics = () => {
 
       {/* Date nav */}
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => setSelectedDate(subDays(selectedDate, 30))} className="p-2 rounded-lg border border-border hover:bg-muted transition-colors"><ChevronLeft className="w-4 h-4" /></button>
-        <span className="font-bold capitalize">{format(subDays(selectedDate, 30), "d MMM", { locale: es })} – {format(selectedDate, "d MMM yyyy", { locale: es })}</span>
-        <button onClick={() => setSelectedDate(addDays(selectedDate, 30))} className="p-2 rounded-lg border border-border hover:bg-muted transition-colors"><ChevronRight className="w-4 h-4" /></button>
+        <button onClick={() => setSelectedDate(addMonths(selectedDate, -1))} className="p-2 rounded-lg border border-border hover:bg-muted transition-colors"><ChevronLeft className="w-4 h-4" /></button>
+        <span className="font-bold capitalize">{format(selectedDate, "MMMM yyyy", { locale: es })}</span>
+        <button onClick={() => setSelectedDate(addMonths(selectedDate, 1))} className="p-2 rounded-lg border border-border hover:bg-muted transition-colors"><ChevronRight className="w-4 h-4" /></button>
         <button onClick={() => setSelectedDate(new Date())} className="text-xs text-primary font-semibold hover:underline ml-auto">Hoy</button>
       </div>
 
@@ -99,7 +102,7 @@ const AdminAnalytics = () => {
           <p className="text-3xl font-extrabold text-primary">{stats.occupancyRate}%</p>
         </div>
         <div className="glass-card rounded-2xl p-5">
-          <p className="text-xs text-muted-foreground mb-1">Reservas (30 días)</p>
+          <p className="text-xs text-muted-foreground mb-1">Reservas del mes</p>
           <p className="text-3xl font-extrabold">{stats.totalBookings}</p>
         </div>
         <div className="glass-card rounded-2xl p-5 col-span-2 lg:col-span-1">

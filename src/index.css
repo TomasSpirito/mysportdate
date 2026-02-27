@@ -62,8 +62,8 @@
     --slot-manual-foreground: 0 0% 100%;
     --slot-fixed: 210 100% 52%;
     --slot-fixed-foreground: 0 0% 100%;
-    --slot-deposit: 152 60% 45%;
-    --slot-deposit-foreground: 0 0% 100%;
+    --slot-deposit: 45 93% 47%;
+    --slot-deposit-foreground: 0 0% 10%;
   }
 
   .dark {
