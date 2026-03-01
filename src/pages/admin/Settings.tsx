@@ -1,7 +1,39 @@
+import { useState, useEffect } from "react";
 import AdminLayout from "@/components/layout/AdminLayout";
-import { Clock, MapPin, Phone, Globe } from "lucide-react";
+import { useFacilitySchedules, useUpsertFacilitySchedule } from "@/hooks/use-supabase-data";
+import { Clock, MapPin, Phone, Globe, Save } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { toast } from "@/hooks/use-toast";
+
+const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 
 const AdminSettings = () => {
+  const { data: schedules = [] } = useFacilitySchedules();
+  const upsertSchedule = useUpsertFacilitySchedule();
+
+  const [localSchedules, setLocalSchedules] = useState<{ day_of_week: number; is_open: boolean; open_time: string; close_time: string }[]>([]);
+
+  useEffect(() => {
+    if (schedules.length > 0) {
+      setLocalSchedules(schedules.map((s) => ({ day_of_week: s.day_of_week, is_open: s.is_open, open_time: s.open_time, close_time: s.close_time })));
+    } else {
+      setLocalSchedules(DAYS.map((_, i) => ({ day_of_week: i, is_open: true, open_time: "08:00", close_time: "23:00" })));
+    }
+  }, [schedules]);
+
+  const updateDay = (dayIdx: number, field: string, value: any) => {
+    setLocalSchedules((prev) => prev.map((s) => s.day_of_week === dayIdx ? { ...s, [field]: value } : s));
+  };
+
+  const handleSaveSchedules = async () => {
+    try {
+      await upsertSchedule.mutateAsync(localSchedules);
+      toast({ title: "Horarios guardados" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message, variant: "destructive" });
+    }
+  };
+
   return (
     <AdminLayout>
       <div className="mb-6">
@@ -35,17 +67,38 @@ const AdminSettings = () => {
         </div>
 
         <div className="glass-card rounded-2xl p-6">
-          <h3 className="font-bold mb-4 flex items-center gap-2"><Clock className="w-4 h-4 text-primary" /> Horarios de operación</h3>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground block mb-1">Apertura</label>
-              <input type="time" defaultValue="08:00" className="w-full px-4 py-2.5 rounded-xl border border-input bg-background text-sm" />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground block mb-1">Cierre</label>
-              <input type="time" defaultValue="23:00" className="w-full px-4 py-2.5 rounded-xl border border-input bg-background text-sm" />
-            </div>
+          <h3 className="font-bold mb-4 flex items-center gap-2"><Clock className="w-4 h-4 text-primary" /> Horarios por día</h3>
+          <p className="text-xs text-muted-foreground mb-4">Configurá los horarios de apertura y cierre para cada día de la semana</p>
+          <div className="space-y-2">
+            {DAYS.map((day, idx) => {
+              const sched = localSchedules.find((s) => s.day_of_week === idx);
+              if (!sched) return null;
+              return (
+                <div key={idx} className={cn("flex items-center gap-3 p-3 rounded-xl transition-colors", sched.is_open ? "bg-muted/30" : "bg-muted/10 opacity-60")}>
+                  <button onClick={() => updateDay(idx, "is_open", !sched.is_open)}
+                    className={cn("w-10 h-6 rounded-full transition-colors relative", sched.is_open ? "bg-primary" : "bg-muted")}>
+                    <div className={cn("absolute top-0.5 w-5 h-5 rounded-full bg-card shadow transition-transform", sched.is_open ? "left-[18px]" : "left-0.5")} />
+                  </button>
+                  <span className="font-semibold text-sm w-24">{day}</span>
+                  {sched.is_open ? (
+                    <div className="flex items-center gap-2 flex-1">
+                      <input type="time" value={sched.open_time} onChange={(e) => updateDay(idx, "open_time", e.target.value)}
+                        className="border border-border rounded-lg px-2 py-1.5 text-sm bg-transparent outline-none focus:border-primary w-28" />
+                      <span className="text-xs text-muted-foreground">a</span>
+                      <input type="time" value={sched.close_time} onChange={(e) => updateDay(idx, "close_time", e.target.value)}
+                        className="border border-border rounded-lg px-2 py-1.5 text-sm bg-transparent outline-none focus:border-primary w-28" />
+                    </div>
+                  ) : (
+                    <span className="text-xs text-muted-foreground italic">Cerrado</span>
+                  )}
+                </div>
+              );
+            })}
           </div>
+          <button onClick={handleSaveSchedules} disabled={upsertSchedule.isPending}
+            className="mt-4 flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-50">
+            <Save className="w-4 h-4" /> {upsertSchedule.isPending ? "Guardando..." : "Guardar horarios"}
+          </button>
         </div>
 
         <div className="glass-card rounded-2xl p-6">
