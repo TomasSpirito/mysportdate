@@ -7,6 +7,8 @@ export interface Sport { id: string; name: string; icon: string; }
 export interface Court { id: string; facility_id: string; sport_id: string; name: string; surface: string | null; price_per_hour: number; features: string[]; image: string | null; }
 export interface Addon { id: string; facility_id: string; name: string; price: number; icon: string; requires_stock: boolean; }
 export interface Booking { id: string; court_id: string; user_id: string | null; user_name: string | null; user_email?: string | null; user_phone?: string | null; start_time: string; end_time: string; total_price: number; deposit_amount: number; status: string; payment_status: string; booking_type: string; created_at: string; }
+export interface Expense { id: string; facility_id: string; category: string; description: string | null; amount: number; expense_date: string; created_at: string; }
+export interface FacilitySchedule { id: string; facility_id: string; day_of_week: number; is_open: boolean; open_time: string; close_time: string; }
 
 // ── Queries ──
 
@@ -173,4 +175,50 @@ export function useUpdateAddon() {
 export function useDeleteAddon() {
   const qc = useQueryClient();
   return useMutation({ mutationFn: async (id: string) => { const { error } = await supabase.from("addons").delete().eq("id", id); if (error) throw error; }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["addons"] }); } });
+}
+
+// Expenses CRUD
+export function useExpenses(date?: string) {
+  return useQuery({ queryKey: ["expenses", date], queryFn: async () => { let q = supabase.from("expenses").select("*"); if (date) q = q.eq("expense_date", date); const { data, error } = await q; if (error) throw error; return data as Expense[]; } });
+}
+
+export function useExpensesRange(startDate?: string, endDate?: string) {
+  return useQuery({
+    queryKey: ["expenses-range", startDate, endDate],
+    queryFn: async () => {
+      if (!startDate || !endDate) return [];
+      const { data, error } = await supabase.from("expenses").select("*").gte("expense_date", startDate).lte("expense_date", endDate);
+      if (error) throw error;
+      return data as Expense[];
+    },
+    enabled: !!startDate && !!endDate,
+  });
+}
+
+export function useCreateExpense() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: async (expense: { category: string; description?: string; amount: number; expense_date: string }) => { const { error } = await supabase.from("expenses").insert({ ...expense, facility_id: FACILITY_ID }); if (error) throw error; }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["expenses"] }); qc.invalidateQueries({ queryKey: ["expenses-range"] }); } });
+}
+
+export function useDeleteExpense() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: async (id: string) => { const { error } = await supabase.from("expenses").delete().eq("id", id); if (error) throw error; }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["expenses"] }); qc.invalidateQueries({ queryKey: ["expenses-range"] }); } });
+}
+
+// Facility Schedules
+export function useFacilitySchedules() {
+  return useQuery({ queryKey: ["facility-schedules"], queryFn: async () => { const { data, error } = await supabase.from("facility_schedules").select("*").eq("facility_id", FACILITY_ID).order("day_of_week"); if (error) throw error; return data as FacilitySchedule[]; } });
+}
+
+export function useUpsertFacilitySchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (schedules: { day_of_week: number; is_open: boolean; open_time: string; close_time: string }[]) => {
+      for (const s of schedules) {
+        const { error } = await supabase.from("facility_schedules").upsert({ facility_id: FACILITY_ID, day_of_week: s.day_of_week, is_open: s.is_open, open_time: s.open_time, close_time: s.close_time }, { onConflict: "facility_id,day_of_week" });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["facility-schedules"] }); },
+  });
 }

@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, CalendarDays, Settings, DollarSign, BarChart3, Trophy } from "lucide-react";
+import { LayoutDashboard, CalendarDays, Settings, DollarSign, BarChart3, Trophy, Receipt } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface AdminLayoutProps {
@@ -11,6 +11,7 @@ const navItems = [
   { to: "/admin/courts", icon: Trophy, label: "Canchas" },
   { to: "/admin/schedule", icon: CalendarDays, label: "Agenda" },
   { to: "/admin/cash", icon: DollarSign, label: "Caja" },
+  { to: "/admin/expenses", icon: Receipt, label: "Gastos" },
   { to: "/admin/analytics", icon: BarChart3, label: "Analíticas" },
   { to: "/admin/settings", icon: Settings, label: "Config" },
 ];
@@ -63,7 +64,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
       {/* Mobile bottom nav */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-secondary border-t border-sidebar-border">
         <nav className="flex justify-around py-2">
-          {navItems.slice(0, 5).map((item) => {
+          {navItems.slice(0, 6).map((item) => {
             const isActive = location.pathname === item.to;
             return (
               <Link

@@ -8,10 +8,37 @@ import {
   type Court, type Sport, type Addon,
 } from "@/hooks/use-supabase-data";
 import { cn } from "@/lib/utils";
-import { Plus, Edit2, Trash2, Trophy, Settings, X } from "lucide-react";
+import { Plus, Edit2, Trash2, Trophy, Settings, X, Search, Check } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 type ModalType = "court" | "sport" | "addon" | null;
+
+const PREDEFINED_SPORTS = [
+  { name: "Fútbol 5", icon: "⚽" }, { name: "Fútbol 7", icon: "⚽" }, { name: "Fútbol 8", icon: "⚽" },
+  { name: "Fútbol 11", icon: "⚽" }, { name: "Futsal", icon: "⚽" }, { name: "Pádel", icon: "🎾" },
+  { name: "Tenis", icon: "🎾" }, { name: "Básquet", icon: "🏀" }, { name: "Vóley", icon: "🏐" },
+  { name: "Beach Vóley", icon: "🏐" }, { name: "Hockey", icon: "🏑" }, { name: "Handball", icon: "🤾" },
+  { name: "Rugby", icon: "🏉" }, { name: "Softball", icon: "🥎" }, { name: "Béisbol", icon: "⚾" },
+  { name: "Cricket", icon: "🏏" }, { name: "Squash", icon: "🏸" }, { name: "Badminton", icon: "🏸" },
+  { name: "Ping Pong", icon: "🏓" }, { name: "Boxeo", icon: "🥊" }, { name: "Artes Marciales", icon: "🥋" },
+  { name: "Gimnasia", icon: "🤸" }, { name: "Natación", icon: "🏊" }, { name: "Atletismo", icon: "🏃" },
+  { name: "Ciclismo", icon: "🚴" }, { name: "Patinaje", icon: "⛸️" }, { name: "Escalada", icon: "🧗" },
+  { name: "Fútbol Americano", icon: "🏈" }, { name: "Lacrosse", icon: "🥍" }, { name: "Golf", icon: "⛳" },
+  { name: "Polo", icon: "🐴" }, { name: "Esgrima", icon: "🤺" }, { name: "Crossfit", icon: "🏋️" },
+  { name: "Yoga", icon: "🧘" }, { name: "Pilates", icon: "🤸" }, { name: "Funcional", icon: "💪" },
+  { name: "Spinning", icon: "🚲" }, { name: "Pickleball", icon: "🏓" },
+];
+
+const PREDEFINED_ADDONS = [
+  { name: "Pelotas", icon: "⚽", price: 500 }, { name: "Pecheras", icon: "🦺", price: 300 },
+  { name: "Agua mineral", icon: "💧", price: 200 }, { name: "Bebida isotónica", icon: "🥤", price: 400 },
+  { name: "Paletas de pádel", icon: "🏓", price: 800 }, { name: "Raquetas", icon: "🎾", price: 1000 },
+  { name: "Iluminación extra", icon: "💡", price: 600 }, { name: "Vestuario", icon: "🚿", price: 500 },
+  { name: "Estacionamiento", icon: "🅿️", price: 0 }, { name: "Parrilla", icon: "🔥", price: 1500 },
+  { name: "Música / DJ", icon: "🎵", price: 2000 }, { name: "Botiquín", icon: "🩹", price: 0 },
+  { name: "Toallas", icon: "🧴", price: 300 }, { name: "Alquiler de canilleras", icon: "🦵", price: 200 },
+  { name: "Red de vóley", icon: "🏐", price: 400 }, { name: "Arcos portátiles", icon: "🥅", price: 600 },
+];
 
 const AdminCourts = () => {
   const [activeTab, setActiveTab] = useState<"courts" | "sports" | "addons">("courts");
@@ -26,6 +53,11 @@ const AdminCourts = () => {
   const [modal, setModal] = useState<ModalType>(null);
   const [editing, setEditing] = useState<Court | Sport | Addon | null>(null);
   const [form, setForm] = useState<any>({});
+
+  // Predefined picker states
+  const [showSportPicker, setShowSportPicker] = useState(false);
+  const [showAddonPicker, setShowAddonPicker] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState("");
 
   const openCreate = (type: ModalType) => { setEditing(null); setForm(type === "court" ? { name: "", sport_id: sports[0]?.id || "", surface: "Sintético", price_per_hour: 0, features: "" } : type === "sport" ? { name: "", icon: "⚽" } : { name: "", price: 0, icon: "📦" }); setModal(type); };
   const openEdit = (type: ModalType, item: any) => { setEditing(item); setForm(type === "court" ? { name: item.name, sport_id: item.sport_id, surface: item.surface || "", price_per_hour: item.price_per_hour, features: (item.features || []).join(", ") } : type === "sport" ? { name: item.name, icon: item.icon } : { name: item.name, price: item.price, icon: item.icon }); setModal(type); };
@@ -57,6 +89,34 @@ const AdminCourts = () => {
       toast({ title: "Eliminado" });
     } catch (err: any) { toast({ title: "Error", description: err?.message, variant: "destructive" }); }
   };
+
+  const handlePickSport = async (sport: { name: string; icon: string }) => {
+    const existing = sports.find((s) => s.name.toLowerCase() === sport.name.toLowerCase());
+    if (existing) { toast({ title: "Ya existe", description: `${sport.name} ya está agregado`, variant: "destructive" }); return; }
+    try {
+      await createSport.mutateAsync(sport);
+      toast({ title: `${sport.icon} ${sport.name} agregado` });
+    } catch (err: any) { toast({ title: "Error", description: err?.message, variant: "destructive" }); }
+  };
+
+  const handlePickAddon = async (addon: { name: string; icon: string; price: number }) => {
+    const existing = addons.find((a) => a.name.toLowerCase() === addon.name.toLowerCase());
+    if (existing) { toast({ title: "Ya existe", description: `${addon.name} ya está agregado`, variant: "destructive" }); return; }
+    try {
+      await createAddon.mutateAsync(addon);
+      toast({ title: `${addon.icon} ${addon.name} agregado` });
+    } catch (err: any) { toast({ title: "Error", description: err?.message, variant: "destructive" }); }
+  };
+
+  const existingSportNames = new Set(sports.map((s) => s.name.toLowerCase()));
+  const existingAddonNames = new Set(addons.map((a) => a.name.toLowerCase()));
+
+  const filteredPredefinedSports = PREDEFINED_SPORTS.filter((s) =>
+    s.name.toLowerCase().includes(pickerSearch.toLowerCase())
+  );
+  const filteredPredefinedAddons = PREDEFINED_ADDONS.filter((a) =>
+    a.name.toLowerCase().includes(pickerSearch.toLowerCase())
+  );
 
   return (
     <AdminLayout>
@@ -110,7 +170,9 @@ const AdminCourts = () => {
         <div>
           <div className="flex items-center justify-between mb-4">
             <span className="text-sm font-semibold">{sports.length} deportes</span>
-            <button onClick={() => openCreate("sport")} className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity"><Plus className="w-4 h-4" /> Nuevo deporte</button>
+            <div className="flex gap-2">
+              <button onClick={() => { setPickerSearch(""); setShowSportPicker(true); }} className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity"><Plus className="w-4 h-4" /> Agregar deporte</button>
+            </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {sports.map((sport) => (
@@ -131,7 +193,7 @@ const AdminCourts = () => {
         <div>
           <div className="flex items-center justify-between mb-4">
             <span className="text-sm font-semibold">{addons.length} extras</span>
-            <button onClick={() => openCreate("addon")} className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity"><Plus className="w-4 h-4" /> Nuevo extra</button>
+            <button onClick={() => { setPickerSearch(""); setShowAddonPicker(true); }} className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity"><Plus className="w-4 h-4" /> Agregar extra</button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {addons.map((addon) => (
@@ -148,7 +210,7 @@ const AdminCourts = () => {
         </div>
       )}
 
-      {/* Modal */}
+      {/* Edit modal (court/sport/addon) */}
       {modal && (
         <div className="fixed inset-0 z-50 bg-foreground/30 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setModal(null)}>
           <div onClick={(e) => e.stopPropagation()} className="bg-card rounded-2xl p-6 max-w-md w-full shadow-2xl">
@@ -205,6 +267,76 @@ const AdminCourts = () => {
             <button onClick={handleSave} className="w-full mt-5 bg-primary text-primary-foreground py-3 rounded-xl font-bold text-sm hover:opacity-90 transition-opacity">
               {editing ? "Guardar cambios" : "Crear"}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Sport picker modal */}
+      {showSportPicker && (
+        <div className="fixed inset-0 z-50 bg-foreground/30 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowSportPicker(false)}>
+          <div onClick={(e) => e.stopPropagation()} className="bg-card rounded-2xl p-6 max-w-lg w-full shadow-2xl max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-extrabold text-lg">Seleccionar deporte</h3>
+              <button onClick={() => setShowSportPicker(false)} className="p-1 rounded-md hover:bg-muted"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="relative mb-3">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input className="w-full border border-border rounded-xl pl-9 pr-3 py-2.5 text-sm bg-transparent outline-none focus:border-primary" placeholder="Buscar deporte..." value={pickerSearch} onChange={(e) => setPickerSearch(e.target.value)} />
+            </div>
+            <div className="flex-1 overflow-y-auto space-y-1">
+              {filteredPredefinedSports.map((sport) => {
+                const alreadyAdded = existingSportNames.has(sport.name.toLowerCase());
+                return (
+                  <button key={sport.name} onClick={() => !alreadyAdded && handlePickSport(sport)} disabled={alreadyAdded}
+                    className={cn("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-left transition-colors", alreadyAdded ? "opacity-50 cursor-not-allowed bg-muted/50" : "hover:bg-muted")}>
+                    <span className="text-xl">{sport.icon}</span>
+                    <span className="font-medium flex-1">{sport.name}</span>
+                    {alreadyAdded && <Check className="w-4 h-4 text-primary" />}
+                  </button>
+                );
+              })}
+              {/* Custom option */}
+              <button onClick={() => { setShowSportPicker(false); openCreate("sport"); }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-left hover:bg-muted border-t border-border mt-2 pt-3">
+                <span className="text-xl">✏️</span>
+                <span className="font-medium">Otro (personalizado)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Addon picker modal */}
+      {showAddonPicker && (
+        <div className="fixed inset-0 z-50 bg-foreground/30 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowAddonPicker(false)}>
+          <div onClick={(e) => e.stopPropagation()} className="bg-card rounded-2xl p-6 max-w-lg w-full shadow-2xl max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-extrabold text-lg">Seleccionar extra</h3>
+              <button onClick={() => setShowAddonPicker(false)} className="p-1 rounded-md hover:bg-muted"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="relative mb-3">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input className="w-full border border-border rounded-xl pl-9 pr-3 py-2.5 text-sm bg-transparent outline-none focus:border-primary" placeholder="Buscar extra..." value={pickerSearch} onChange={(e) => setPickerSearch(e.target.value)} />
+            </div>
+            <div className="flex-1 overflow-y-auto space-y-1">
+              {filteredPredefinedAddons.map((addon) => {
+                const alreadyAdded = existingAddonNames.has(addon.name.toLowerCase());
+                return (
+                  <button key={addon.name} onClick={() => !alreadyAdded && handlePickAddon(addon)} disabled={alreadyAdded}
+                    className={cn("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-left transition-colors", alreadyAdded ? "opacity-50 cursor-not-allowed bg-muted/50" : "hover:bg-muted")}>
+                    <span className="text-xl">{addon.icon}</span>
+                    <span className="font-medium flex-1">{addon.name}</span>
+                    <span className="text-xs text-muted-foreground">${addon.price.toLocaleString()}</span>
+                    {alreadyAdded && <Check className="w-4 h-4 text-primary" />}
+                  </button>
+                );
+              })}
+              <button onClick={() => { setShowAddonPicker(false); openCreate("addon"); }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-left hover:bg-muted border-t border-border mt-2 pt-3">
+                <span className="text-xl">✏️</span>
+                <span className="font-medium">Otro (personalizado)</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

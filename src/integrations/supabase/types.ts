@@ -192,6 +192,36 @@ export type Database = {
           },
         ]
       }
+      expenses: {
+        Row: {
+          amount: number
+          category: string
+          created_at: string
+          description: string | null
+          expense_date: string
+          facility_id: string
+          id: string
+        }
+        Insert: {
+          amount?: number
+          category: string
+          created_at?: string
+          description?: string | null
+          expense_date?: string
+          facility_id?: string
+          id?: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string
+          description?: string | null
+          expense_date?: string
+          facility_id?: string
+          id?: string
+        }
+        Relationships: []
+      }
       facilities: {
         Row: {
           close_time: string
@@ -219,6 +249,33 @@ export type Database = {
           name?: string
           open_time?: string
           owner_id?: string | null
+        }
+        Relationships: []
+      }
+      facility_schedules: {
+        Row: {
+          close_time: string
+          day_of_week: number
+          facility_id: string
+          id: string
+          is_open: boolean
+          open_time: string
+        }
+        Insert: {
+          close_time?: string
+          day_of_week: number
+          facility_id?: string
+          id?: string
+          is_open?: boolean
+          open_time?: string
+        }
+        Update: {
+          close_time?: string
+          day_of_week?: number
+          facility_id?: string
+          id?: string
+          is_open?: boolean
+          open_time?: string
         }
         Relationships: []
       }

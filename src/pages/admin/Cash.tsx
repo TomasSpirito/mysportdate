@@ -1,10 +1,10 @@
 import { useState, useMemo } from "react";
 import AdminLayout from "@/components/layout/AdminLayout";
-import { useBookings, useCourts, useUpdateBooking } from "@/hooks/use-supabase-data";
+import { useBookings, useCourts, useUpdateBooking, useExpenses } from "@/hooks/use-supabase-data";
 import { cn } from "@/lib/utils";
-import { format, addDays, addMonths, startOfMonth, endOfMonth, isSameMonth } from "date-fns";
+import { format, addDays, addMonths } from "date-fns";
 import { es } from "date-fns/locale";
-import { DollarSign, TrendingUp, CreditCard, AlertCircle, ChevronLeft, ChevronRight, Calendar } from "lucide-react";
+import { DollarSign, TrendingUp, CreditCard, AlertCircle, ChevronLeft, ChevronRight, Calendar, TrendingDown } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 const AdminCash = () => {
@@ -13,6 +13,7 @@ const AdminCash = () => {
 
   const dateStr = format(selectedDate, "yyyy-MM-dd");
   const { data: bookings = [] } = useBookings(dateStr);
+  const { data: expenses = [] } = useExpenses(dateStr);
   const { data: courts = [] } = useCourts();
   const updateBooking = useUpdateBooking();
 
@@ -22,8 +23,10 @@ const AdminCash = () => {
     const totalRevenue = bookings.reduce((s, b) => s + b.total_price, 0);
     const totalDeposits = bookings.reduce((s, b) => s + b.deposit_amount, 0);
     const pendingPayments = totalRevenue - totalDeposits;
-    return { totalBookings: bookings.length, totalRevenue, totalDeposits, pendingPayments };
-  }, [bookings]);
+    const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+    const netBalance = totalDeposits - totalExpenses;
+    return { totalBookings: bookings.length, totalRevenue, totalDeposits, pendingPayments, totalExpenses, netBalance };
+  }, [bookings, expenses]);
 
   const pendingBookings = bookings.filter((b) => b.payment_status === "partial" || b.payment_status === "none");
 
@@ -37,11 +40,21 @@ const AdminCash = () => {
   const prevMonth = () => setSelectedDate(addMonths(selectedDate, -1));
   const nextMonth = () => setSelectedDate(addMonths(selectedDate, 1));
 
+  const EXPENSE_CATEGORIES: Record<string, { label: string; icon: string }> = {
+    luz: { label: "Luz / Electricidad", icon: "💡" }, agua: { label: "Agua", icon: "💧" },
+    gas: { label: "Gas", icon: "🔥" }, internet: { label: "Internet", icon: "📡" },
+    alquiler: { label: "Alquiler", icon: "🏠" }, mantenimiento: { label: "Mantenimiento", icon: "🔧" },
+    limpieza: { label: "Limpieza", icon: "🧹" }, proveedores: { label: "Proveedores", icon: "📦" },
+    sueldos: { label: "Sueldos", icon: "👷" }, impuestos: { label: "Impuestos", icon: "📋" },
+    seguros: { label: "Seguros", icon: "🛡️" }, marketing: { label: "Marketing", icon: "📣" },
+    equipamiento: { label: "Equipamiento", icon: "🏐" }, otro: { label: "Otro", icon: "📝" },
+  };
+
   return (
     <AdminLayout>
       <div className="mb-6">
         <h1 className="text-2xl font-extrabold">Caja</h1>
-        <p className="text-sm text-muted-foreground">Control de recaudación y movimientos</p>
+        <p className="text-sm text-muted-foreground">Control de recaudación, gastos y movimientos</p>
       </div>
 
       {/* View toggle + navigation */}
@@ -63,16 +76,17 @@ const AdminCash = () => {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-8">
         {[
-          { label: "Recaudado total", value: stats.totalRevenue, icon: DollarSign, color: "text-primary" },
-          { label: "Señas cobradas", value: stats.totalDeposits, icon: CreditCard, color: "text-primary" },
-          { label: "Pagos pendientes", value: stats.pendingPayments, icon: AlertCircle, color: "text-accent" },
-          { label: "Reservas", value: stats.totalBookings, icon: TrendingUp, color: "text-info", isCurrency: false },
+          { label: "Ingresos total", value: stats.totalRevenue, icon: DollarSign, color: "text-primary" },
+          { label: "Cobrado", value: stats.totalDeposits, icon: CreditCard, color: "text-primary" },
+          { label: "Pendiente", value: stats.pendingPayments, icon: AlertCircle, color: "text-accent" },
+          { label: "Egresos", value: stats.totalExpenses, icon: TrendingDown, color: "text-destructive" },
+          { label: "Balance neto", value: stats.netBalance, icon: TrendingUp, color: stats.netBalance >= 0 ? "text-primary" : "text-destructive" },
         ].map((card) => (
           <div key={card.label} className="glass-card rounded-2xl p-5">
             <div className="flex items-center gap-2 mb-2"><card.icon className={`w-4 h-4 ${card.color}`} /><span className="text-xs text-muted-foreground">{card.label}</span></div>
-            <p className="text-2xl font-extrabold">{card.isCurrency === false ? card.value : `$${card.value.toLocaleString()}`}</p>
+            <p className={cn("text-xl font-extrabold", card.color)}>${card.value.toLocaleString()}</p>
           </div>
         ))}
       </div>
@@ -103,14 +117,13 @@ const AdminCash = () => {
       )}
 
       {/* All movements */}
-      <h2 className="font-bold text-lg mb-3">Movimientos</h2>
+      <h2 className="font-bold text-lg mb-3">Ingresos</h2>
       {bookings.length === 0 ? (
-        <div className="text-center py-10 bg-muted/50 rounded-2xl">
-          <p className="text-2xl mb-2">📭</p>
-          <p className="text-sm font-semibold">No hay movimientos para esta fecha</p>
+        <div className="text-center py-6 bg-muted/50 rounded-2xl mb-6">
+          <p className="text-sm font-semibold text-muted-foreground">Sin ingresos</p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2 mb-6">
           {bookings.map((b) => (
             <div key={b.id} className="glass-card rounded-xl p-4 flex items-center gap-3 text-sm">
               <div className={cn("w-2.5 h-2.5 rounded-full", b.payment_status === "full" ? "bg-primary" : b.payment_status === "partial" ? "bg-accent" : "bg-destructive")} />
@@ -131,6 +144,30 @@ const AdminCash = () => {
               </span>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Expenses section */}
+      <h2 className="font-bold text-lg mb-3">Egresos</h2>
+      {expenses.length === 0 ? (
+        <div className="text-center py-6 bg-muted/50 rounded-2xl">
+          <p className="text-sm font-semibold text-muted-foreground">Sin egresos</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {expenses.map((e) => {
+            const cat = EXPENSE_CATEGORIES[e.category] || { label: e.category, icon: "📝" };
+            return (
+              <div key={e.id} className="glass-card rounded-xl p-4 flex items-center gap-3 text-sm">
+                <span className="text-lg">{cat.icon}</span>
+                <div className="flex-1">
+                  <p className="font-medium">{cat.label}</p>
+                  {e.description && <p className="text-xs text-muted-foreground">{e.description}</p>}
+                </div>
+                <p className="font-bold text-destructive">-${e.amount.toLocaleString()}</p>
+              </div>
+            );
+          })}
         </div>
       )}
     </AdminLayout>

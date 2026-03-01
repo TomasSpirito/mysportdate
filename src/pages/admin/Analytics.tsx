@@ -1,37 +1,58 @@
 import AdminLayout from "@/components/layout/AdminLayout";
-import { useBookingsRange, useCourts, useSports } from "@/hooks/use-supabase-data";
+import { useBookingsRange, useCourts, useSports, useExpensesRange, useFacilitySchedules } from "@/hooks/use-supabase-data";
 import { useMemo, useState } from "react";
-import { format, subDays, startOfWeek, startOfMonth, endOfMonth, addMonths, addDays, getDay } from "date-fns";
+import { format, subDays, startOfMonth, endOfMonth, addMonths, getDay } from "date-fns";
 import { es } from "date-fns/locale";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { ChevronLeft, ChevronRight, TrendingDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const DAYS_SHORT = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
-const HEAT_HOURS = Array.from({ length: 6 }, (_, i) => i + 18); // 18-23
-const sportColors = ["hsl(152, 76%, 36%)", "hsl(24, 95%, 53%)", "hsl(210, 100%, 52%)", "hsl(340, 80%, 50%)"];
+const HEAT_HOURS = Array.from({ length: 6 }, (_, i) => i + 18);
+const sportColors = ["hsl(152, 76%, 36%)", "hsl(24, 95%, 53%)", "hsl(210, 100%, 52%)", "hsl(340, 80%, 50%)", "hsl(270, 60%, 50%)", "hsl(45, 93%, 47%)"];
+const expenseCatLabels: Record<string, string> = {
+  luz: "Luz", agua: "Agua", gas: "Gas", internet: "Internet", alquiler: "Alquiler",
+  mantenimiento: "Mant.", limpieza: "Limpieza", proveedores: "Prov.", sueldos: "Sueldos",
+  impuestos: "Impuestos", seguros: "Seguros", marketing: "Marketing", equipamiento: "Equip.", otro: "Otro",
+};
+const expenseColors = ["hsl(0, 84%, 60%)", "hsl(24, 95%, 53%)", "hsl(45, 93%, 47%)", "hsl(340, 80%, 50%)", "hsl(270, 60%, 50%)", "hsl(210, 100%, 52%)"];
 
 const AdminAnalytics = () => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const monthStart = format(startOfMonth(selectedDate), "yyyy-MM-dd");
   const monthEnd = format(endOfMonth(selectedDate), "yyyy-MM-dd");
-  const rangeStart = monthStart;
-  const rangeEnd = monthEnd;
   const weekStart = format(subDays(selectedDate, 6), "yyyy-MM-dd");
 
-  const { data: bookings = [] } = useBookingsRange(rangeStart, rangeEnd);
-  const { data: weekBookings = [] } = useBookingsRange(weekStart, rangeEnd);
+  const { data: bookings = [] } = useBookingsRange(monthStart, monthEnd);
+  const { data: weekBookings = [] } = useBookingsRange(weekStart, monthEnd);
+  const { data: expenses = [] } = useExpensesRange(monthStart, monthEnd);
   const { data: courts = [] } = useCourts();
   const { data: sports = [] } = useSports();
+  const { data: schedules = [] } = useFacilitySchedules();
 
   const stats = useMemo(() => {
     const totalBookings = bookings.length;
     const daysInMonth = endOfMonth(selectedDate).getDate();
-    const totalSlots = courts.length * 16 * daysInMonth;
+
+    // Calculate available slots considering per-day schedules
+    let totalSlots = 0;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const date = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), d);
+      const dayIdx = (getDay(date) + 6) % 7; // Mon=0
+      const sched = schedules.find((s) => s.day_of_week === dayIdx);
+      if (sched && sched.is_open) {
+        const openH = parseInt(sched.open_time.split(":")[0]);
+        const closeH = parseInt(sched.close_time.split(":")[0]);
+        totalSlots += courts.length * (closeH - openH);
+      }
+    }
+
     const occupancyRate = totalSlots > 0 ? Math.round((totalBookings / totalSlots) * 100) : 0;
     const totalRevenue = bookings.reduce((s, b) => s + b.total_price, 0);
+    const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+    const netProfit = totalRevenue - totalExpenses;
 
-    // Sport breakdown for donut
+    // Sport breakdown
     const sportCounts: Record<string, number> = {};
     bookings.forEach((b) => {
       const court = courts.find((c) => c.id === b.court_id);
@@ -43,22 +64,20 @@ const AdminAnalytics = () => {
       color: sportColors[i % sportColors.length],
     }));
 
-    // Heatmap data: day-of-week (Mon-Sun) x hour (18-23)
+    // Heatmap
     const heatmap: Record<string, number> = {};
-    const heatmapTotal: Record<string, number> = {};
     bookings.forEach((b) => {
       const d = new Date(b.start_time);
-      const dayIdx = (getDay(d) + 6) % 7; // Mon=0, Sun=6
+      const dayIdx = (getDay(d) + 6) % 7;
       const hour = d.getUTCHours();
       if (hour >= 18 && hour <= 23) {
         const key = `${dayIdx}-${hour}`;
         heatmap[key] = (heatmap[key] || 0) + 1;
       }
     });
-    // Normalize heatmap (max 4 weeks of data = ~4 per cell max)
     const heatmapMax = Math.max(...Object.values(heatmap), 1);
 
-    // Cash flow last 7 days (stacked: cash vs digital)
+    // Cash flow last 7 days
     const cashFlow: { day: string; cash: number; digital: number }[] = [];
     for (let i = 6; i >= 0; i--) {
       const d = subDays(selectedDate, i);
@@ -69,8 +88,17 @@ const AdminAnalytics = () => {
       cashFlow.push({ day: format(d, "EEE d", { locale: es }), cash, digital });
     }
 
-    return { totalBookings, occupancyRate, totalRevenue, sportBreakdown, heatmap, heatmapMax, cashFlow };
-  }, [bookings, weekBookings, courts, sports, selectedDate]);
+    // Expense breakdown by category
+    const expCats: Record<string, number> = {};
+    expenses.forEach((e) => { expCats[e.category] = (expCats[e.category] || 0) + e.amount; });
+    const expenseBreakdown = Object.entries(expCats).map(([cat, amount], i) => ({
+      category: expenseCatLabels[cat] || cat, value: amount,
+      percentage: totalExpenses > 0 ? Math.round((amount / totalExpenses) * 100) : 0,
+      color: expenseColors[i % expenseColors.length],
+    })).sort((a, b) => b.value - a.value);
+
+    return { totalBookings, occupancyRate, totalRevenue, totalExpenses, netProfit, sportBreakdown, heatmap, heatmapMax, cashFlow, expenseBreakdown };
+  }, [bookings, weekBookings, courts, sports, selectedDate, expenses, schedules]);
 
   const getHeatColor = (count: number, max: number) => {
     if (count === 0) return "bg-muted";
@@ -87,27 +115,34 @@ const AdminAnalytics = () => {
         <p className="text-sm text-muted-foreground">Estadísticas y rendimiento del predio</p>
       </div>
 
-      {/* Date nav */}
       <div className="flex items-center gap-3 mb-6">
         <button onClick={() => setSelectedDate(addMonths(selectedDate, -1))} className="p-2 rounded-lg border border-border hover:bg-muted transition-colors"><ChevronLeft className="w-4 h-4" /></button>
         <span className="font-bold capitalize">{format(selectedDate, "MMMM yyyy", { locale: es })}</span>
         <button onClick={() => setSelectedDate(addMonths(selectedDate, 1))} className="p-2 rounded-lg border border-border hover:bg-muted transition-colors"><ChevronRight className="w-4 h-4" /></button>
-        <button onClick={() => setSelectedDate(new Date())} className="text-xs text-primary font-semibold hover:underline ml-auto">Hoy</button>
+        <button onClick={() => setSelectedDate(new Date())} className="flex items-center gap-1.5 bg-primary text-primary-foreground px-3 py-1.5 rounded-full text-xs font-semibold hover:opacity-90 transition-opacity ml-auto">Hoy</button>
       </div>
 
       {/* Summary row */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-8">
         <div className="glass-card rounded-2xl p-5">
-          <p className="text-xs text-muted-foreground mb-1">Ocupación promedio</p>
+          <p className="text-xs text-muted-foreground mb-1">Ocupación</p>
           <p className="text-3xl font-extrabold text-primary">{stats.occupancyRate}%</p>
         </div>
         <div className="glass-card rounded-2xl p-5">
-          <p className="text-xs text-muted-foreground mb-1">Reservas del mes</p>
+          <p className="text-xs text-muted-foreground mb-1">Reservas</p>
           <p className="text-3xl font-extrabold">{stats.totalBookings}</p>
         </div>
+        <div className="glass-card rounded-2xl p-5">
+          <p className="text-xs text-muted-foreground mb-1">Ingresos</p>
+          <p className="text-3xl font-extrabold text-primary">${stats.totalRevenue.toLocaleString()}</p>
+        </div>
+        <div className="glass-card rounded-2xl p-5">
+          <p className="text-xs text-muted-foreground mb-1">Egresos</p>
+          <p className="text-3xl font-extrabold text-destructive">${stats.totalExpenses.toLocaleString()}</p>
+        </div>
         <div className="glass-card rounded-2xl p-5 col-span-2 lg:col-span-1">
-          <p className="text-xs text-muted-foreground mb-1">Facturación período</p>
-          <p className="text-3xl font-extrabold">${stats.totalRevenue.toLocaleString()}</p>
+          <p className="text-xs text-muted-foreground mb-1">Ganancia neta</p>
+          <p className={cn("text-3xl font-extrabold", stats.netProfit >= 0 ? "text-primary" : "text-destructive")}>${stats.netProfit.toLocaleString()}</p>
         </div>
       </div>
 
@@ -150,7 +185,7 @@ const AdminAnalytics = () => {
           </div>
         </div>
 
-        {/* Cash flow stacked bar */}
+        {/* Cash flow */}
         <div className="glass-card rounded-2xl p-5">
           <h3 className="font-bold text-sm mb-4">💰 Flujo de Caja (últimos 7 días)</h3>
           <ResponsiveContainer width="100%" height={250}>
@@ -158,7 +193,7 @@ const AdminAnalytics = () => {
               <XAxis dataKey="day" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 11 }} />
               <Tooltip formatter={(value: number) => `$${value.toLocaleString()}`} />
-              <Bar dataKey="cash" stackId="a" fill="hsl(152, 76%, 36%)" name="Efectivo" radius={[0, 0, 0, 0]} />
+              <Bar dataKey="cash" stackId="a" fill="hsl(152, 76%, 36%)" name="Efectivo" />
               <Bar dataKey="digital" stackId="a" fill="hsl(210, 100%, 52%)" name="Digital" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -169,34 +204,65 @@ const AdminAnalytics = () => {
         </div>
       </div>
 
-      {/* Sport breakdown donut */}
-      {stats.sportBreakdown.length > 0 && (
-        <div className="glass-card rounded-2xl p-5">
-          <h3 className="font-bold text-sm mb-4">⚽ Distribución por deporte</h3>
-          <div className="flex items-center justify-center gap-8 flex-wrap">
-            <div className="w-52 h-52">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={stats.sportBreakdown} dataKey="value" nameKey="sport" cx="50%" cy="50%" outerRadius={80} innerRadius={50} paddingAngle={3} strokeWidth={0}>
-                    {stats.sportBreakdown.map((entry, i) => (<Cell key={i} fill={entry.color} />))}
-                  </Pie>
-                  <Tooltip formatter={(value: number, name: string) => [`${value} reservas`, name]} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="space-y-3">
-              {stats.sportBreakdown.map((s) => (
-                <div key={s.sport} className="flex items-center gap-3">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: s.color }} />
-                  <span className="text-sm font-medium w-20">{s.sport}</span>
-                  <span className="text-sm font-bold">{s.percentage}%</span>
-                  <span className="text-xs text-muted-foreground">({s.value})</span>
-                </div>
-              ))}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Sport breakdown */}
+        {stats.sportBreakdown.length > 0 && (
+          <div className="glass-card rounded-2xl p-5">
+            <h3 className="font-bold text-sm mb-4">⚽ Distribución por deporte</h3>
+            <div className="flex items-center justify-center gap-8 flex-wrap">
+              <div className="w-52 h-52">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={stats.sportBreakdown} dataKey="value" nameKey="sport" cx="50%" cy="50%" outerRadius={80} innerRadius={50} paddingAngle={3} strokeWidth={0}>
+                      {stats.sportBreakdown.map((entry, i) => (<Cell key={i} fill={entry.color} />))}
+                    </Pie>
+                    <Tooltip formatter={(value: number, name: string) => [`${value} reservas`, name]} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="space-y-3">
+                {stats.sportBreakdown.map((s) => (
+                  <div key={s.sport} className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: s.color }} />
+                    <span className="text-sm font-medium w-20">{s.sport}</span>
+                    <span className="text-sm font-bold">{s.percentage}%</span>
+                    <span className="text-xs text-muted-foreground">({s.value})</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Expense breakdown */}
+        {stats.expenseBreakdown.length > 0 && (
+          <div className="glass-card rounded-2xl p-5">
+            <h3 className="font-bold text-sm mb-4 flex items-center gap-2"><TrendingDown className="w-4 h-4 text-destructive" /> Distribución de gastos</h3>
+            <div className="flex items-center justify-center gap-8 flex-wrap">
+              <div className="w-52 h-52">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={stats.expenseBreakdown} dataKey="value" nameKey="category" cx="50%" cy="50%" outerRadius={80} innerRadius={50} paddingAngle={3} strokeWidth={0}>
+                      {stats.expenseBreakdown.map((entry, i) => (<Cell key={i} fill={entry.color} />))}
+                    </Pie>
+                    <Tooltip formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name]} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="space-y-3">
+                {stats.expenseBreakdown.map((e) => (
+                  <div key={e.category} className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: e.color }} />
+                    <span className="text-sm font-medium w-20">{e.category}</span>
+                    <span className="text-sm font-bold">{e.percentage}%</span>
+                    <span className="text-xs text-muted-foreground">(${e.value.toLocaleString()})</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </AdminLayout>
   );
 };
