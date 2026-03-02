@@ -1,12 +1,16 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { useSports } from "@/hooks/use-supabase-data";
+import { useSports, useFacility } from "@/hooks/use-supabase-data";
 import PlayerLayout from "@/components/layout/PlayerLayout";
-import { MapPin, Shield } from "lucide-react";
+import { MapPin, Shield, Phone, Mail, MessageCircle, Clock } from "lucide-react";
 
 const Index = () => {
   const navigate = useNavigate();
   const { data: sports = [], isLoading } = useSports();
+  const { data: facility } = useFacility();
+
+  const facilityName = facility?.name || "Mi Predio";
+  const whatsappUrl = facility?.whatsapp ? `https://wa.me/${facility.whatsapp}` : null;
 
   return (
     <PlayerLayout>
@@ -14,19 +18,21 @@ const Index = () => {
       <section className="bg-secondary text-secondary-foreground pb-10 pt-6">
         <div className="container">
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight mb-2">
-              Reservá tu cancha<br />
-              <span className="text-gradient-brand">al instante</span>
+            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight mb-1">
+              {facilityName}
             </h1>
+            <p className="text-lg font-medium text-gradient-brand mb-2">Reservá tu cancha al instante</p>
             <p className="text-sm text-sidebar-foreground opacity-70 mb-6 max-w-sm">
               Elegí tu deporte, encontrá horarios libres y reservá en segundos. Sin llamar, sin esperar.
             </p>
           </motion.div>
 
-          <div className="flex items-center gap-2 text-xs text-sidebar-foreground opacity-50 mb-1">
-            <MapPin className="w-3 h-3" />
-            <span>Complejo Spordate • San Isidro, Buenos Aires</span>
-          </div>
+          {facility?.location && (
+            <div className="flex items-center gap-2 text-xs text-sidebar-foreground opacity-50 mb-1">
+              <MapPin className="w-3 h-3" />
+              <span>{facility.location}</span>
+            </div>
+          )}
         </div>
       </section>
 
@@ -82,6 +88,42 @@ const Index = () => {
           ))}
         </div>
       </section>
+
+      {/* Contact section */}
+      {facility && (facility.phone || facility.email || facility.whatsapp || facility.location) && (
+        <section className="container mb-10">
+          <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}
+            className="glass-card rounded-2xl p-6">
+            <h2 className="font-bold text-lg mb-4">📍 Contacto</h2>
+            <div className="space-y-3">
+              {facility.location && (
+                <div className="flex items-center gap-3 text-sm">
+                  <MapPin className="w-4 h-4 text-primary shrink-0" />
+                  <span>{facility.location}</span>
+                </div>
+              )}
+              {facility.phone && (
+                <div className="flex items-center gap-3 text-sm">
+                  <Phone className="w-4 h-4 text-primary shrink-0" />
+                  <a href={`tel:${facility.phone}`} className="hover:underline">{facility.phone}</a>
+                </div>
+              )}
+              {facility.email && (
+                <div className="flex items-center gap-3 text-sm">
+                  <Mail className="w-4 h-4 text-primary shrink-0" />
+                  <a href={`mailto:${facility.email}`} className="hover:underline">{facility.email}</a>
+                </div>
+              )}
+            </div>
+            {whatsappUrl && (
+              <a href={whatsappUrl} target="_blank" rel="noopener noreferrer"
+                className="mt-4 inline-flex items-center gap-2 bg-[hsl(142,70%,45%)] text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-opacity">
+                <MessageCircle className="w-4 h-4" /> Escribinos por WhatsApp
+              </a>
+            )}
+          </motion.div>
+        </section>
+      )}
 
       {/* Admin link */}
       <div className="container mb-10">

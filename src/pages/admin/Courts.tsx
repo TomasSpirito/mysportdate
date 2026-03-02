@@ -59,7 +59,9 @@ const AdminCourts = () => {
   const [showAddonPicker, setShowAddonPicker] = useState(false);
   const [pickerSearch, setPickerSearch] = useState("");
 
-  const openCreate = (type: ModalType) => { setEditing(null); setForm(type === "court" ? { name: "", sport_id: sports[0]?.id || "", surface: "Sintético", price_per_hour: 0, features: "" } : type === "sport" ? { name: "", icon: "⚽" } : { name: "", price: 0, icon: "📦" }); setModal(type); };
+  const SURFACE_OPTIONS = ["Césped sintético", "Césped natural", "Cemento", "Parquet", "Madera", "Arena", "Caucho", "Baldosa", "Arcilla", "Tartán", "Otro"];
+
+  const openCreate = (type: ModalType) => { setEditing(null); setForm(type === "court" ? { name: "", sport_id: sports[0]?.id || "", surface: SURFACE_OPTIONS[0], price_per_hour: 0, features: "" } : type === "sport" ? { name: "", icon: "⚽" } : { name: "", price: 0, icon: "📦" }); setModal(type); };
   const openEdit = (type: ModalType, item: any) => { setEditing(item); setForm(type === "court" ? { name: item.name, sport_id: item.sport_id, surface: item.surface || "", price_per_hour: item.price_per_hour, features: (item.features || []).join(", ") } : type === "sport" ? { name: item.name, icon: item.icon } : { name: item.name, price: item.price, icon: item.icon }); setModal(type); };
 
   const handleSave = async () => {
@@ -111,11 +113,13 @@ const AdminCourts = () => {
   const existingSportNames = new Set(sports.map((s) => s.name.toLowerCase()));
   const existingAddonNames = new Set(addons.map((a) => a.name.toLowerCase()));
 
+  const normalize = (str: string) => str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
   const filteredPredefinedSports = PREDEFINED_SPORTS.filter((s) =>
-    s.name.toLowerCase().includes(pickerSearch.toLowerCase())
+    normalize(s.name).includes(normalize(pickerSearch))
   );
   const filteredPredefinedAddons = PREDEFINED_ADDONS.filter((a) =>
-    a.name.toLowerCase().includes(pickerSearch.toLowerCase())
+    normalize(a.name).includes(normalize(pickerSearch))
   );
 
   return (
@@ -233,7 +237,9 @@ const AdminCourts = () => {
                   </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground mb-1 block">Superficie</label>
-                    <input className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-transparent outline-none focus:border-primary" value={form.surface} onChange={(e) => setForm({ ...form, surface: e.target.value })} />
+                    <select className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-transparent outline-none focus:border-primary" value={form.surface} onChange={(e) => setForm({ ...form, surface: e.target.value })}>
+                      {SURFACE_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
                   </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground mb-1 block">Precio por hora ($)</label>

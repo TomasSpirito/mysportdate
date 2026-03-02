@@ -1,6 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { LayoutDashboard, CalendarDays, Settings, DollarSign, BarChart3, Trophy, Receipt } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useFacility } from "@/hooks/use-supabase-data";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -18,6 +19,9 @@ const navItems = [
 
 const AdminLayout = ({ children }: AdminLayoutProps) => {
   const location = useLocation();
+  const { data: facility } = useFacility();
+  const facilityName = facility?.name || "Mi Predio";
+  const initials = facilityName.charAt(0).toUpperCase();
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -26,10 +30,10 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
         <div className="p-5 border-b border-sidebar-border">
           <Link to="/admin" className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-extrabold text-lg">
-              S
+              {initials}
             </div>
             <div>
-              <span className="font-bold text-lg tracking-tight block">spordate</span>
+              <span className="font-bold text-lg tracking-tight block">{facilityName}</span>
               <span className="text-xs text-sidebar-foreground opacity-60">Panel Admin</span>
             </div>
           </Link>
@@ -88,8 +92,8 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
         {/* Mobile header */}
         <header className="lg:hidden sticky top-0 z-40 bg-secondary text-secondary-foreground border-b border-sidebar-border">
           <div className="flex items-center h-14 px-4 gap-3">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-extrabold text-sm">S</div>
-            <span className="font-bold text-lg tracking-tight">spordate</span>
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-extrabold text-sm">{initials}</div>
+            <span className="font-bold text-lg tracking-tight">{facilityName}</span>
             <span className="ml-auto text-xs text-sidebar-foreground opacity-60">Admin</span>
           </div>
         </header>
