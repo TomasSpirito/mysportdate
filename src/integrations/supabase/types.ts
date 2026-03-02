@@ -226,29 +226,38 @@ export type Database = {
         Row: {
           close_time: string
           created_at: string
+          email: string | null
           id: string
           location: string | null
           name: string
           open_time: string
           owner_id: string | null
+          phone: string | null
+          whatsapp: string | null
         }
         Insert: {
           close_time?: string
           created_at?: string
+          email?: string | null
           id?: string
           location?: string | null
           name: string
           open_time?: string
           owner_id?: string | null
+          phone?: string | null
+          whatsapp?: string | null
         }
         Update: {
           close_time?: string
           created_at?: string
+          email?: string | null
           id?: string
           location?: string | null
           name?: string
           open_time?: string
           owner_id?: string | null
+          phone?: string | null
+          whatsapp?: string | null
         }
         Relationships: []
       }

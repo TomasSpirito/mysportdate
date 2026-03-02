@@ -1,13 +1,11 @@
 import { useState } from "react";
 import AdminLayout from "@/components/layout/AdminLayout";
-import { useCourts, useBookings, useCreateBooking, useUpdateBooking, useDeleteBooking, type Booking } from "@/hooks/use-supabase-data";
+import { useCourts, useBookings, useCreateBooking, useUpdateBooking, useDeleteBooking, useFacilitySchedules, type Booking } from "@/hooks/use-supabase-data";
 import { cn } from "@/lib/utils";
-import { format, addDays } from "date-fns";
+import { format, addDays, getDay } from "date-fns";
 import { es } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, X, Phone, Mail, CalendarCheck } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, Phone, Mail, CalendarCheck, AlertCircle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-
-const hours = Array.from({ length: 16 }, (_, i) => `${(i + 8).toString().padStart(2, "0")}:00`);
 
 const typeLabels: Record<string, string> = { online: "Online", fixed: "Fijo", manual: "Manual" };
 
@@ -15,17 +13,37 @@ const AdminDashboard = () => {
   const today = new Date();
   const [selectedDate, setSelectedDate] = useState(today);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
-
-  // Manual booking modal state
   const [manualSlot, setManualSlot] = useState<{ courtId: string; hour: string } | null>(null);
   const [manualForm, setManualForm] = useState({ name: "", email: "", phone: "" });
 
   const dateStr = format(selectedDate, "yyyy-MM-dd");
   const { data: courts = [] } = useCourts();
   const { data: bookings = [] } = useBookings(dateStr);
+  const { data: schedules = [] } = useFacilitySchedules();
   const updateBooking = useUpdateBooking();
   const deleteBooking = useDeleteBooking();
   const createBooking = useCreateBooking();
+
+  // Get schedule for current day (date-fns getDay: 0=Sunday, we use 0=Monday)
+  const jsDay = getDay(selectedDate); // 0=Sun,1=Mon,...6=Sat
+  const dayIdx = jsDay === 0 ? 6 : jsDay - 1; // 0=Mon,...6=Sun
+  const todaySchedule = schedules.find((s) => s.day_of_week === dayIdx);
+  const isClosed = todaySchedule ? !todaySchedule.is_open : false;
+
+  // Build hours from schedule
+  const hours: string[] = [];
+  if (todaySchedule && todaySchedule.is_open) {
+    const openH = parseInt(todaySchedule.open_time.split(":")[0]);
+    const closeH = parseInt(todaySchedule.close_time.split(":")[0]);
+    for (let h = openH; h < closeH; h++) {
+      hours.push(`${h.toString().padStart(2, "0")}:00`);
+    }
+  } else if (!todaySchedule) {
+    // Default if no schedule configured
+    for (let h = 8; h < 23; h++) {
+      hours.push(`${h.toString().padStart(2, "0")}:00`);
+    }
+  }
 
   const getBooking = (courtId: string, hour: string) =>
     bookings.find((b) => { const bHour = new Date(b.start_time).getUTCHours(); return b.court_id === courtId && `${bHour.toString().padStart(2, "0")}:00` === hour; });
@@ -74,16 +92,9 @@ const AdminDashboard = () => {
     try {
       const price = getCourtPrice(manualSlot.courtId);
       await createBooking.mutateAsync({
-        court_id: manualSlot.courtId,
-        date: dateStr,
-        time: manualSlot.hour,
-        user_name: manualForm.name.trim(),
-        user_email: manualForm.email.trim(),
-        user_phone: manualForm.phone.trim(),
-        total_price: price,
-        deposit_amount: 0,
-        payment_status: "none",
-        booking_type: "manual",
+        court_id: manualSlot.courtId, date: dateStr, time: manualSlot.hour,
+        user_name: manualForm.name.trim(), user_email: manualForm.email.trim(), user_phone: manualForm.phone.trim(),
+        total_price: price, deposit_amount: 0, payment_status: "none", booking_type: "manual",
       });
       toast({ title: "Reserva manual creada" });
       setManualSlot(null);
@@ -118,46 +129,58 @@ const AdminDashboard = () => {
           { label: "Libre", cls: "bg-slot-free border border-slot-free-border" },
           { label: "Seña pagada", cls: "bg-slot-deposit text-slot-deposit-foreground" },
           { label: "Pagado total", cls: "bg-primary text-primary-foreground" },
-          { label: "Manual", cls: "bg-destructive text-destructive-foreground" },
+          { label: "Manual (no pagado)", cls: "bg-destructive text-destructive-foreground" },
           { label: "Fijo/Abonado", cls: "bg-info text-info-foreground" },
         ].map((item) => (
           <div key={item.label} className="flex items-center gap-1.5"><div className={cn("w-4 h-4 rounded", item.cls)} /><span>{item.label}</span></div>
         ))}
       </div>
 
-      <div className="overflow-x-auto border border-border rounded-2xl">
-        <table className="w-full min-w-[700px]">
-          <thead>
-            <tr className="bg-muted">
-              <th className="text-left text-xs font-semibold p-3 w-24">Hora</th>
-              {courts.map((c) => (<th key={c.id} className="text-left text-xs font-semibold p-3">{c.name}</th>))}
-            </tr>
-          </thead>
-          <tbody>
-            {hours.map((hour, idx) => (
-              <tr key={hour} className={idx % 2 === 0 ? "bg-transparent" : "bg-muted/30"}>
-                <td className="text-sm font-semibold font-mono p-3 text-muted-foreground">{hour}</td>
-                {courts.map((court) => {
-                  const booking = getBooking(court.id, hour);
-                  return (
-                    <td key={court.id} className="p-1.5">
-                      <button onClick={() => handleSlotClick(court.id, hour)}
-                        className={cn("w-full rounded-lg p-2 text-left text-[11px] transition-all min-h-[44px]", getSlotStyle(booking))}>
-                        {booking && (
-                          <>
-                            <p className="font-semibold truncate">{booking.user_name || "Sin nombre"}</p>
-                            <p className="opacity-80 text-[10px]">{typeLabels[booking.booking_type] || booking.booking_type}</p>
-                          </>
-                        )}
-                      </button>
-                    </td>
-                  );
-                })}
+      {isClosed ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <AlertCircle className="w-12 h-12 text-muted-foreground mb-4" />
+          <h2 className="text-xl font-bold mb-2">Cerrado</h2>
+          <p className="text-sm text-muted-foreground">El predio no opera este día según la configuración de horarios.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto border border-border rounded-2xl">
+          <table className="w-full" style={{ tableLayout: "fixed" }}>
+            <colgroup>
+              <col style={{ width: "80px" }} />
+              {courts.map((c) => (<col key={c.id} />))}
+            </colgroup>
+            <thead>
+              <tr className="bg-muted">
+                <th className="text-left text-xs font-semibold p-3">Hora</th>
+                {courts.map((c) => (<th key={c.id} className="text-left text-xs font-semibold p-3 truncate">{c.name}</th>))}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {hours.map((hour, idx) => (
+                <tr key={hour} className={idx % 2 === 0 ? "bg-transparent" : "bg-muted/30"}>
+                  <td className="text-sm font-semibold font-mono p-3 text-muted-foreground">{hour}</td>
+                  {courts.map((court) => {
+                    const booking = getBooking(court.id, hour);
+                    return (
+                      <td key={court.id} className="p-1.5">
+                        <button onClick={() => handleSlotClick(court.id, hour)}
+                          className={cn("w-full rounded-lg p-2 text-left text-[11px] transition-all h-[52px]", getSlotStyle(booking))}>
+                          {booking && (
+                            <>
+                              <p className="font-semibold truncate">{booking.user_name || "Sin nombre"}</p>
+                              <p className="opacity-80 text-[10px]">{typeLabels[booking.booking_type] || booking.booking_type}</p>
+                            </>
+                          )}
+                        </button>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Booking detail modal */}
       {selectedBooking && (

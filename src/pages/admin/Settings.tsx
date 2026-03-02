@@ -1,17 +1,32 @@
 import { useState, useEffect } from "react";
 import AdminLayout from "@/components/layout/AdminLayout";
-import { useFacilitySchedules, useUpsertFacilitySchedule } from "@/hooks/use-supabase-data";
-import { Clock, MapPin, Phone, Globe, Save } from "lucide-react";
+import { useFacility, useUpdateFacility, useFacilitySchedules, useUpsertFacilitySchedule } from "@/hooks/use-supabase-data";
+import { Clock, MapPin, Phone, Globe, Save, Mail, MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 
 const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 
 const AdminSettings = () => {
+  const { data: facility } = useFacility();
+  const updateFacility = useUpdateFacility();
   const { data: schedules = [] } = useFacilitySchedules();
   const upsertSchedule = useUpsertFacilitySchedule();
 
+  const [facilityForm, setFacilityForm] = useState({ name: "", location: "", phone: "", email: "", whatsapp: "" });
   const [localSchedules, setLocalSchedules] = useState<{ day_of_week: number; is_open: boolean; open_time: string; close_time: string }[]>([]);
+
+  useEffect(() => {
+    if (facility) {
+      setFacilityForm({
+        name: facility.name || "",
+        location: facility.location || "",
+        phone: facility.phone || "",
+        email: facility.email || "",
+        whatsapp: facility.whatsapp || "",
+      });
+    }
+  }, [facility]);
 
   useEffect(() => {
     if (schedules.length > 0) {
@@ -34,6 +49,21 @@ const AdminSettings = () => {
     }
   };
 
+  const handleSaveFacility = async () => {
+    try {
+      await updateFacility.mutateAsync({
+        name: facilityForm.name,
+        location: facilityForm.location,
+        phone: facilityForm.phone,
+        email: facilityForm.email,
+        whatsapp: facilityForm.whatsapp,
+      } as any);
+      toast({ title: "Datos del predio guardados" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message, variant: "destructive" });
+    }
+  };
+
   return (
     <AdminLayout>
       <div className="mb-6">
@@ -47,23 +77,31 @@ const AdminSettings = () => {
           <div className="space-y-4">
             <div>
               <label className="text-xs font-medium text-muted-foreground block mb-1">Nombre del complejo</label>
-              <input type="text" defaultValue="Complejo Spordate" className="w-full px-4 py-2.5 rounded-xl border border-input bg-background text-sm" />
+              <input type="text" value={facilityForm.name} onChange={(e) => setFacilityForm({ ...facilityForm, name: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-input bg-background text-sm" />
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground block mb-1">Dirección</label>
-              <input type="text" defaultValue="Av. del Libertador 1234, San Isidro" className="w-full px-4 py-2.5 rounded-xl border border-input bg-background text-sm" />
+              <input type="text" value={facilityForm.location} onChange={(e) => setFacilityForm({ ...facilityForm, location: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-input bg-background text-sm" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-muted-foreground block mb-1 flex items-center gap-1"><Phone className="w-3 h-3" /> Teléfono</label>
-                <input type="tel" defaultValue="+54 11 4567-8901" className="w-full px-4 py-2.5 rounded-xl border border-input bg-background text-sm" />
+                <input type="tel" value={facilityForm.phone} onChange={(e) => setFacilityForm({ ...facilityForm, phone: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-input bg-background text-sm" />
               </div>
               <div>
-                <label className="text-xs font-medium text-muted-foreground block mb-1 flex items-center gap-1"><Globe className="w-3 h-3" /> Web</label>
-                <input type="url" defaultValue="https://spordate.com" className="w-full px-4 py-2.5 rounded-xl border border-input bg-background text-sm" />
+                <label className="text-xs font-medium text-muted-foreground block mb-1 flex items-center gap-1"><Mail className="w-3 h-3" /> Email</label>
+                <input type="email" value={facilityForm.email} onChange={(e) => setFacilityForm({ ...facilityForm, email: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-input bg-background text-sm" />
               </div>
             </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground block mb-1 flex items-center gap-1"><MessageCircle className="w-3 h-3" /> WhatsApp (número sin + ni espacios, ej: 5491112345678)</label>
+              <input type="text" value={facilityForm.whatsapp} onChange={(e) => setFacilityForm({ ...facilityForm, whatsapp: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-input bg-background text-sm" placeholder="5491112345678" />
+            </div>
           </div>
+          <button onClick={handleSaveFacility} disabled={updateFacility.isPending}
+            className="mt-4 flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-50">
+            <Save className="w-4 h-4" /> {updateFacility.isPending ? "Guardando..." : "Guardar datos"}
+          </button>
         </div>
 
         <div className="glass-card rounded-2xl p-6">
@@ -108,10 +146,6 @@ const AdminSettings = () => {
             <span className="text-sm text-muted-foreground">% del total</span>
           </div>
         </div>
-
-        <button className="bg-primary text-primary-foreground px-6 py-3 rounded-xl font-bold text-sm hover:opacity-90 transition-opacity">
-          Guardar cambios
-        </button>
       </div>
     </AdminLayout>
   );

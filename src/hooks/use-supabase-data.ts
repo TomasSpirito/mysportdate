@@ -9,8 +9,24 @@ export interface Addon { id: string; facility_id: string; name: string; price: n
 export interface Booking { id: string; court_id: string; user_id: string | null; user_name: string | null; user_email?: string | null; user_phone?: string | null; start_time: string; end_time: string; total_price: number; deposit_amount: number; status: string; payment_status: string; booking_type: string; created_at: string; }
 export interface Expense { id: string; facility_id: string; category: string; description: string | null; amount: number; expense_date: string; created_at: string; }
 export interface FacilitySchedule { id: string; facility_id: string; day_of_week: number; is_open: boolean; open_time: string; close_time: string; }
+export interface Facility { id: string; name: string; location: string | null; open_time: string; close_time: string; owner_id: string | null; phone: string | null; email: string | null; whatsapp: string | null; }
 
 // ── Queries ──
+
+export function useFacility() {
+  return useQuery({ queryKey: ["facility"], queryFn: async () => { const { data, error } = await supabase.from("facilities").select("*").eq("id", FACILITY_ID).maybeSingle(); if (error) throw error; return data as Facility | null; } });
+}
+
+export function useUpdateFacility() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (updates: Partial<Facility>) => {
+      const { error } = await supabase.from("facilities").update(updates as any).eq("id", FACILITY_ID);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["facility"] }); },
+  });
+}
 
 export function useSports() {
   return useQuery({ queryKey: ["sports"], queryFn: async () => { const { data, error } = await supabase.from("sports").select("*"); if (error) throw error; return data as Sport[]; } });

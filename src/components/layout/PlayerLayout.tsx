@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
+import { useFacility } from "@/hooks/use-supabase-data";
 
 interface PlayerLayoutProps {
   children: React.ReactNode;
@@ -9,6 +10,10 @@ interface PlayerLayoutProps {
 }
 
 const PlayerLayout = ({ children, title, showBack = false, backTo = "/" }: PlayerLayoutProps) => {
+  const { data: facility } = useFacility();
+  const facilityName = facility?.name || "Mi Predio";
+  const initials = facilityName.charAt(0).toUpperCase();
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -21,9 +26,9 @@ const PlayerLayout = ({ children, title, showBack = false, backTo = "/" }: Playe
           )}
           <Link to="/" className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-extrabold text-sm">
-              S
+              {initials}
             </div>
-            <span className="font-bold text-lg tracking-tight">spordate</span>
+            <span className="font-bold text-lg tracking-tight">{facilityName}</span>
           </Link>
           {title && <span className="ml-auto text-sm font-medium text-sidebar-foreground">{title}</span>}
         </div>
