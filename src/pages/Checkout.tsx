@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { format, parse } from "date-fns";
 import { es } from "date-fns/locale";
 import { useCourt, useAddons, useCreateBooking } from "@/hooks/use-supabase-data";
+import { useTenantPath } from "@/hooks/use-tenant";
 import PlayerLayout from "@/components/layout/PlayerLayout";
 import { cn } from "@/lib/utils";
 import { Check, MapPin, Clock, CreditCard, User, Mail, Phone, Loader2 } from "lucide-react";
@@ -12,6 +13,7 @@ import { toast } from "@/hooks/use-toast";
 const Checkout = () => {
   const [params] = useSearchParams();
   const navigate = useNavigate();
+  const tp = useTenantPath();
   const courtId = params.get("court");
   const date = params.get("date");
   const time = params.get("time");
@@ -60,7 +62,7 @@ const Checkout = () => {
         total: total.toString(), deposit: payDeposit ? depositAmount.toString() : total.toString(),
         addons: selectedAddons.join(","),
       });
-      navigate(`/confirmation?${confirmParams.toString()}`);
+      navigate(tp(`/confirmation?${confirmParams.toString()}`));
     } catch (err: any) {
       if (err?.message?.includes("SLOT_TAKEN")) {
         toast({ title: "¡Ese horario ya fue reservado!", description: "Elegí otro horario", variant: "destructive" });
@@ -71,14 +73,14 @@ const Checkout = () => {
   };
 
   return (
-    <PlayerLayout showBack backTo={`/booking/${courtId}`} title="Checkout">
-      <div className="container py-6 pb-32">
+    <PlayerLayout showBack backTo={tp(`/booking/${courtId}`)} title="Checkout">
+      <div className="container px-4 py-6 pb-32">
         {/* Summary */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-2xl p-5 mb-4">
           <h3 className="font-extrabold text-lg mb-3">Resumen de tu reserva</h3>
           <div className="space-y-2.5 text-sm">
-            <div className="flex items-center gap-2"><MapPin className="w-4 h-4 text-primary" /><span className="font-medium">{court.name}</span><span className="ml-auto text-muted-foreground">{court.surface}</span></div>
-            <div className="flex items-center gap-2"><Clock className="w-4 h-4 text-primary" /><span>{format(dateObj, "EEEE d 'de' MMMM", { locale: es })}</span><span className="ml-auto font-semibold">{time} - {endTime}</span></div>
+            <div className="flex items-center gap-2"><MapPin className="w-4 h-4 text-primary shrink-0" /><span className="font-medium truncate">{court.name}</span><span className="ml-auto text-muted-foreground shrink-0">{court.surface}</span></div>
+            <div className="flex items-center gap-2 flex-wrap"><Clock className="w-4 h-4 text-primary shrink-0" /><span className="truncate">{format(dateObj, "EEEE d 'de' MMMM", { locale: es })}</span><span className="ml-auto font-semibold shrink-0">{time} - {endTime}</span></div>
           </div>
         </motion.div>
 
@@ -87,45 +89,44 @@ const Checkout = () => {
           <h3 className="font-bold text-sm mb-3">Tus datos</h3>
           <div className="space-y-3">
             <div className="flex items-center gap-3 border border-border rounded-xl px-3 py-2.5 focus-within:border-primary transition-colors">
-              <User className="w-4 h-4 text-muted-foreground" />
-              <input type="text" placeholder="Nombre completo" value={name} onChange={(e) => setName(e.target.value)}
-                className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground" />
+              <User className="w-4 h-4 text-muted-foreground shrink-0" />
+              <input type="text" placeholder="Nombre completo" value={name} onChange={(e) => setName(e.target.value)} className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground min-w-0" />
             </div>
             <div className="flex items-center gap-3 border border-border rounded-xl px-3 py-2.5 focus-within:border-primary transition-colors">
-              <Mail className="w-4 h-4 text-muted-foreground" />
-              <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)}
-                className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground" />
+              <Mail className="w-4 h-4 text-muted-foreground shrink-0" />
+              <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground min-w-0" />
             </div>
             <div className="flex items-center gap-3 border border-border rounded-xl px-3 py-2.5 focus-within:border-primary transition-colors">
-              <Phone className="w-4 h-4 text-muted-foreground" />
-              <input type="tel" placeholder="Teléfono" value={phone} onChange={(e) => setPhone(e.target.value)}
-                className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground" />
+              <Phone className="w-4 h-4 text-muted-foreground shrink-0" />
+              <input type="tel" placeholder="Teléfono" value={phone} onChange={(e) => setPhone(e.target.value)} className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground min-w-0" />
             </div>
           </div>
         </motion.div>
 
         {/* Addons */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="glass-card rounded-2xl p-5 mb-4">
-          <h3 className="font-bold text-sm mb-3">¿Querés agregar extras?</h3>
-          <div className="space-y-2">
-            {addons.map((addon) => {
-              const isSelected = selectedAddons.includes(addon.id);
-              return (
-                <button key={addon.id} onClick={() => toggleAddon(addon.id)}
-                  className={cn("w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left",
-                    isSelected ? "border-primary bg-primary/5" : "border-border hover:border-primary/30")}>
-                  <span className="text-xl">{addon.icon}</span>
-                  <span className="flex-1 font-medium text-sm">{addon.name}</span>
-                  <span className="text-sm font-bold">+${addon.price.toLocaleString()}</span>
-                  <div className={cn("w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors",
-                    isSelected ? "bg-primary border-primary" : "border-border")}>
-                    {isSelected && <Check className="w-3 h-3 text-primary-foreground" />}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </motion.div>
+        {addons.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="glass-card rounded-2xl p-5 mb-4">
+            <h3 className="font-bold text-sm mb-3">¿Querés agregar extras?</h3>
+            <div className="space-y-2">
+              {addons.map((addon) => {
+                const isSelected = selectedAddons.includes(addon.id);
+                return (
+                  <button key={addon.id} onClick={() => toggleAddon(addon.id)}
+                    className={cn("w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left",
+                      isSelected ? "border-primary bg-primary/5" : "border-border hover:border-primary/30")}>
+                    <span className="text-xl shrink-0">{addon.icon}</span>
+                    <span className="flex-1 font-medium text-sm min-w-0 truncate">{addon.name}</span>
+                    <span className="text-sm font-bold shrink-0">+${addon.price.toLocaleString()}</span>
+                    <div className={cn("w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors shrink-0",
+                      isSelected ? "bg-primary border-primary" : "border-border")}>
+                      {isSelected && <Check className="w-3 h-3 text-primary-foreground" />}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
 
         {/* Payment */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="glass-card rounded-2xl p-5 mb-4">
@@ -143,7 +144,7 @@ const Checkout = () => {
         </motion.div>
 
         {/* Bottom bar */}
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/95 backdrop-blur-md border-t border-border">
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/95 backdrop-blur-md border-t border-border z-30">
           <div className="container">
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm text-muted-foreground">Total</span>

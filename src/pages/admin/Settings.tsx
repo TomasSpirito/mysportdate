@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { useFacility, useUpdateFacility, useFacilitySchedules, useUpsertFacilitySchedule } from "@/hooks/use-supabase-data";
-import { Clock, MapPin, Phone, Globe, Save, Mail, MessageCircle } from "lucide-react";
+import { Clock, MapPin, Phone, Save, Mail, MessageCircle, Link2, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 
@@ -12,9 +12,12 @@ const AdminSettings = () => {
   const updateFacility = useUpdateFacility();
   const { data: schedules = [] } = useFacilitySchedules();
   const upsertSchedule = useUpsertFacilitySchedule();
+  const [copied, setCopied] = useState(false);
 
   const [facilityForm, setFacilityForm] = useState({ name: "", location: "", phone: "", email: "", whatsapp: "" });
   const [localSchedules, setLocalSchedules] = useState<{ day_of_week: number; is_open: boolean; open_time: string; close_time: string }[]>([]);
+
+  const publicUrl = facility?.slug ? `${window.location.origin}/predio/${facility.slug}` : "";
 
   useEffect(() => {
     if (facility) {
@@ -64,6 +67,13 @@ const AdminSettings = () => {
     }
   };
 
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(publicUrl);
+    setCopied(true);
+    toast({ title: "Enlace copiado" });
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
     <AdminLayout>
       <div className="mb-6">
@@ -72,30 +82,54 @@ const AdminSettings = () => {
       </div>
 
       <div className="max-w-2xl space-y-6">
+        {/* Shareable link */}
+        {publicUrl && (
+          <div className="glass-card rounded-2xl p-6 border-2 border-primary/20">
+            <h3 className="font-bold mb-3 flex items-center gap-2"><Link2 className="w-4 h-4 text-primary" /> Tu link para compartir</h3>
+            <p className="text-xs text-muted-foreground mb-3">Compartí este enlace con tus clientes para que reserven online</p>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 bg-muted rounded-xl px-4 py-2.5 text-sm font-mono truncate min-w-0">
+                {publicUrl}
+              </div>
+              <button onClick={handleCopyLink}
+                className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-opacity shrink-0">
+                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                {copied ? "Copiado" : "Copiar"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Facility info */}
         <div className="glass-card rounded-2xl p-6">
           <h3 className="font-bold mb-4 flex items-center gap-2"><MapPin className="w-4 h-4 text-primary" /> Información del predio</h3>
           <div className="space-y-4">
             <div>
               <label className="text-xs font-medium text-muted-foreground block mb-1">Nombre del complejo</label>
-              <input type="text" value={facilityForm.name} onChange={(e) => setFacilityForm({ ...facilityForm, name: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-input bg-background text-sm" />
+              <input type="text" value={facilityForm.name} onChange={(e) => setFacilityForm({ ...facilityForm, name: e.target.value })}
+                className="w-full px-4 py-2.5 rounded-xl border border-input bg-background text-sm" />
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground block mb-1">Dirección</label>
-              <input type="text" value={facilityForm.location} onChange={(e) => setFacilityForm({ ...facilityForm, location: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-input bg-background text-sm" />
+              <input type="text" value={facilityForm.location} onChange={(e) => setFacilityForm({ ...facilityForm, location: e.target.value })}
+                className="w-full px-4 py-2.5 rounded-xl border border-input bg-background text-sm" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-muted-foreground block mb-1 flex items-center gap-1"><Phone className="w-3 h-3" /> Teléfono</label>
-                <input type="tel" value={facilityForm.phone} onChange={(e) => setFacilityForm({ ...facilityForm, phone: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-input bg-background text-sm" />
+                <input type="tel" value={facilityForm.phone} onChange={(e) => setFacilityForm({ ...facilityForm, phone: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-input bg-background text-sm" />
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground block mb-1 flex items-center gap-1"><Mail className="w-3 h-3" /> Email</label>
-                <input type="email" value={facilityForm.email} onChange={(e) => setFacilityForm({ ...facilityForm, email: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-input bg-background text-sm" />
+                <input type="email" value={facilityForm.email} onChange={(e) => setFacilityForm({ ...facilityForm, email: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-input bg-background text-sm" />
               </div>
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground block mb-1 flex items-center gap-1"><MessageCircle className="w-3 h-3" /> WhatsApp (número sin + ni espacios, ej: 5491112345678)</label>
-              <input type="text" value={facilityForm.whatsapp} onChange={(e) => setFacilityForm({ ...facilityForm, whatsapp: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-input bg-background text-sm" placeholder="5491112345678" />
+              <label className="text-xs font-medium text-muted-foreground block mb-1 flex items-center gap-1"><MessageCircle className="w-3 h-3" /> WhatsApp</label>
+              <input type="text" value={facilityForm.whatsapp} onChange={(e) => setFacilityForm({ ...facilityForm, whatsapp: e.target.value })}
+                className="w-full px-4 py-2.5 rounded-xl border border-input bg-background text-sm" placeholder="5491112345678" />
             </div>
           </div>
           <button onClick={handleSaveFacility} disabled={updateFacility.isPending}
@@ -104,27 +138,28 @@ const AdminSettings = () => {
           </button>
         </div>
 
+        {/* Schedules */}
         <div className="glass-card rounded-2xl p-6">
           <h3 className="font-bold mb-4 flex items-center gap-2"><Clock className="w-4 h-4 text-primary" /> Horarios por día</h3>
-          <p className="text-xs text-muted-foreground mb-4">Configurá los horarios de apertura y cierre para cada día de la semana</p>
+          <p className="text-xs text-muted-foreground mb-4">Configurá los horarios de apertura y cierre para cada día</p>
           <div className="space-y-2">
             {DAYS.map((day, idx) => {
               const sched = localSchedules.find((s) => s.day_of_week === idx);
               if (!sched) return null;
               return (
-                <div key={idx} className={cn("flex items-center gap-3 p-3 rounded-xl transition-colors", sched.is_open ? "bg-muted/30" : "bg-muted/10 opacity-60")}>
+                <div key={idx} className={cn("flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded-xl transition-colors", sched.is_open ? "bg-muted/30" : "bg-muted/10 opacity-60")}>
                   <button onClick={() => updateDay(idx, "is_open", !sched.is_open)}
-                    className={cn("w-10 h-6 rounded-full transition-colors relative", sched.is_open ? "bg-primary" : "bg-muted")}>
+                    className={cn("w-10 h-6 rounded-full transition-colors relative shrink-0", sched.is_open ? "bg-primary" : "bg-muted")}>
                     <div className={cn("absolute top-0.5 w-5 h-5 rounded-full bg-card shadow transition-transform", sched.is_open ? "left-[18px]" : "left-0.5")} />
                   </button>
-                  <span className="font-semibold text-sm w-24">{day}</span>
+                  <span className="font-semibold text-xs sm:text-sm w-16 sm:w-24 shrink-0">{day.slice(0, 3)}</span>
                   {sched.is_open ? (
-                    <div className="flex items-center gap-2 flex-1">
+                    <div className="flex items-center gap-1 sm:gap-2 flex-1 min-w-0">
                       <input type="time" value={sched.open_time} onChange={(e) => updateDay(idx, "open_time", e.target.value)}
-                        className="border border-border rounded-lg px-2 py-1.5 text-sm bg-transparent outline-none focus:border-primary w-28" />
+                        className="border border-border rounded-lg px-1.5 sm:px-2 py-1 sm:py-1.5 text-xs sm:text-sm bg-transparent outline-none focus:border-primary w-20 sm:w-28" />
                       <span className="text-xs text-muted-foreground">a</span>
                       <input type="time" value={sched.close_time} onChange={(e) => updateDay(idx, "close_time", e.target.value)}
-                        className="border border-border rounded-lg px-2 py-1.5 text-sm bg-transparent outline-none focus:border-primary w-28" />
+                        className="border border-border rounded-lg px-1.5 sm:px-2 py-1 sm:py-1.5 text-xs sm:text-sm bg-transparent outline-none focus:border-primary w-20 sm:w-28" />
                     </div>
                   ) : (
                     <span className="text-xs text-muted-foreground italic">Cerrado</span>
@@ -137,14 +172,6 @@ const AdminSettings = () => {
             className="mt-4 flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-50">
             <Save className="w-4 h-4" /> {upsertSchedule.isPending ? "Guardando..." : "Guardar horarios"}
           </button>
-        </div>
-
-        <div className="glass-card rounded-2xl p-6">
-          <h3 className="font-bold mb-4">Seña por defecto</h3>
-          <div className="flex items-center gap-3">
-            <input type="number" defaultValue="40" className="w-24 px-4 py-2.5 rounded-xl border border-input bg-background text-sm" />
-            <span className="text-sm text-muted-foreground">% del total</span>
-          </div>
         </div>
       </div>
     </AdminLayout>
