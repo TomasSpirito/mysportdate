@@ -233,6 +233,7 @@ export type Database = {
           open_time: string
           owner_id: string | null
           phone: string | null
+          slug: string | null
           whatsapp: string | null
         }
         Insert: {
@@ -245,6 +246,7 @@ export type Database = {
           open_time?: string
           owner_id?: string | null
           phone?: string | null
+          slug?: string | null
           whatsapp?: string | null
         }
         Update: {
@@ -257,6 +259,7 @@ export type Database = {
           open_time?: string
           owner_id?: string | null
           phone?: string | null
+          slug?: string | null
           whatsapp?: string | null
         }
         Relationships: []
@@ -356,6 +359,9 @@ export type Database = {
         }
         Returns: string
       }
+      create_facility_for_user: { Args: { p_name: string }; Returns: string }
+      generate_slug: { Args: { input: string }; Returns: string }
+      get_user_facility_id: { Args: { p_user_id: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

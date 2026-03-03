@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { useFacility } from "@/hooks/use-supabase-data";
 
@@ -9,28 +9,30 @@ interface PlayerLayoutProps {
   backTo?: string;
 }
 
-const PlayerLayout = ({ children, title, showBack = false, backTo = "/" }: PlayerLayoutProps) => {
+const PlayerLayout = ({ children, title, showBack = false, backTo }: PlayerLayoutProps) => {
+  const { slug } = useParams<{ slug?: string }>();
   const { data: facility } = useFacility();
   const facilityName = facility?.name || "Mi Predio";
   const initials = facilityName.charAt(0).toUpperCase();
+  const homeLink = slug ? `/predio/${slug}` : "/";
+  const resolvedBackTo = backTo || homeLink;
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="sticky top-0 z-50 bg-secondary text-secondary-foreground">
-        <div className="container flex items-center h-14 gap-3">
+        <div className="container flex items-center h-14 gap-3 px-4">
           {showBack && (
-            <Link to={backTo} className="p-1 -ml-1 rounded-md hover:bg-sidebar-accent transition-colors">
+            <Link to={resolvedBackTo} className="p-1 -ml-1 rounded-md hover:bg-sidebar-accent transition-colors shrink-0">
               <ArrowLeft className="w-5 h-5" />
             </Link>
           )}
-          <Link to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-extrabold text-sm">
+          <Link to={homeLink} className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-extrabold text-sm shrink-0">
               {initials}
             </div>
-            <span className="font-bold text-lg tracking-tight">{facilityName}</span>
+            <span className="font-bold text-lg tracking-tight truncate">{facilityName}</span>
           </Link>
-          {title && <span className="ml-auto text-sm font-medium text-sidebar-foreground">{title}</span>}
+          {title && <span className="ml-auto text-sm font-medium text-sidebar-foreground shrink-0 truncate max-w-[120px]">{title}</span>}
         </div>
       </header>
       <main>{children}</main>
