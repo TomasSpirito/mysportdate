@@ -20,6 +20,7 @@ import AdminCash from "./pages/admin/Cash";
 import AdminAnalytics from "./pages/admin/Analytics";
 import AdminSettings from "./pages/admin/Settings";
 import AdminExpenses from "./pages/admin/Expenses";
+import AdminPlayers from "./pages/admin/Players";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -53,6 +54,7 @@ const App = () => (
               <Route path="/admin/cash" element={<AdminCash />} />
               <Route path="/admin/analytics" element={<AdminAnalytics />} />
               <Route path="/admin/expenses" element={<AdminExpenses />} />
+              <Route path="/admin/players" element={<AdminPlayers />} />
               <Route path="/admin/settings" element={<AdminSettings />} />
             </Route>
 
