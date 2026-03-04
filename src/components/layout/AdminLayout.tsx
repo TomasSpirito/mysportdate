@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, CalendarDays, Settings, DollarSign, BarChart3, Trophy, Receipt, LogOut } from "lucide-react";
+import { LayoutDashboard, CalendarDays, Settings, DollarSign, BarChart3, Trophy, Receipt, Users, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFacility } from "@/hooks/use-supabase-data";
 import { useAuth } from "@/contexts/AuthContext";
@@ -14,6 +14,7 @@ const navItems = [
   { to: "/admin/schedule", icon: CalendarDays, label: "Agenda" },
   { to: "/admin/cash", icon: DollarSign, label: "Caja" },
   { to: "/admin/expenses", icon: Receipt, label: "Gastos" },
+  { to: "/admin/players", icon: Users, label: "Jugadores" },
   { to: "/admin/analytics", icon: BarChart3, label: "Analíticas" },
   { to: "/admin/settings", icon: Settings, label: "Config" },
 ];

@@ -4,12 +4,13 @@ import { useMemo, useState } from "react";
 import { format, subDays, startOfMonth, endOfMonth, addMonths, getDay } from "date-fns";
 import { es } from "date-fns/locale";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { ChevronLeft, ChevronRight, TrendingDown } from "lucide-react";
+import { ChevronLeft, ChevronRight, TrendingDown, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const DAYS_SHORT = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 const HEAT_HOURS = Array.from({ length: 6 }, (_, i) => i + 18);
 const sportColors = ["hsl(152, 76%, 36%)", "hsl(24, 95%, 53%)", "hsl(210, 100%, 52%)", "hsl(340, 80%, 50%)", "hsl(270, 60%, 50%)", "hsl(45, 93%, 47%)"];
+const courtColors = ["hsl(152, 76%, 36%)", "hsl(24, 95%, 53%)", "hsl(210, 100%, 52%)", "hsl(340, 80%, 50%)", "hsl(270, 60%, 50%)", "hsl(45, 93%, 47%)", "hsl(180, 60%, 45%)", "hsl(30, 80%, 55%)"];
 const expenseCatLabels: Record<string, string> = {
   luz: "Luz", agua: "Agua", gas: "Gas", internet: "Internet", alquiler: "Alquiler",
   mantenimiento: "Mant.", limpieza: "Limpieza", proveedores: "Prov.", sueldos: "Sueldos",
@@ -34,11 +35,10 @@ const AdminAnalytics = () => {
     const totalBookings = bookings.length;
     const daysInMonth = endOfMonth(selectedDate).getDate();
 
-    // Calculate available slots considering per-day schedules
     let totalSlots = 0;
     for (let d = 1; d <= daysInMonth; d++) {
       const date = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), d);
-      const dayIdx = (getDay(date) + 6) % 7; // Mon=0
+      const dayIdx = (getDay(date) + 6) % 7;
       const sched = schedules.find((s) => s.day_of_week === dayIdx);
       if (sched && sched.is_open) {
         const openH = parseInt(sched.open_time.split(":")[0]);
@@ -62,6 +62,15 @@ const AdminAnalytics = () => {
       sport: s.name, value: sportCounts[s.id] || 0,
       percentage: totalBookings > 0 ? Math.round(((sportCounts[s.id] || 0) / totalBookings) * 100) : 0,
       color: sportColors[i % sportColors.length],
+    }));
+
+    // Court breakdown
+    const courtCounts: Record<string, number> = {};
+    bookings.forEach((b) => { courtCounts[b.court_id] = (courtCounts[b.court_id] || 0) + 1; });
+    const courtBreakdown = courts.map((c, i) => ({
+      court: c.name, value: courtCounts[c.id] || 0,
+      percentage: totalBookings > 0 ? Math.round(((courtCounts[c.id] || 0) / totalBookings) * 100) : 0,
+      color: courtColors[i % courtColors.length],
     }));
 
     // Heatmap
@@ -88,7 +97,7 @@ const AdminAnalytics = () => {
       cashFlow.push({ day: format(d, "EEE d", { locale: es }), cash, digital });
     }
 
-    // Expense breakdown by category
+    // Expense breakdown
     const expCats: Record<string, number> = {};
     expenses.forEach((e) => { expCats[e.category] = (expCats[e.category] || 0) + e.amount; });
     const expenseBreakdown = Object.entries(expCats).map(([cat, amount], i) => ({
@@ -97,7 +106,20 @@ const AdminAnalytics = () => {
       color: expenseColors[i % expenseColors.length],
     })).sort((a, b) => b.value - a.value);
 
-    return { totalBookings, occupancyRate, totalRevenue, totalExpenses, netProfit, sportBreakdown, heatmap, heatmapMax, cashFlow, expenseBreakdown };
+    // Client stats
+    const uniqueClients = new Map<string, { name: string; phone: string; bookings: number; cancelled: number }>();
+    bookings.forEach((b) => {
+      const key = b.user_phone || b.user_name || "anon";
+      const existing = uniqueClients.get(key) || { name: b.user_name || "Sin nombre", phone: b.user_phone || "", bookings: 0, cancelled: 0 };
+      existing.bookings++;
+      if (b.status === "cancelled") existing.cancelled++;
+      uniqueClients.set(key, existing);
+    });
+    const totalClients = uniqueClients.size;
+    const totalCancelled = bookings.filter((b) => b.status === "cancelled").length;
+    const attendanceRate = totalBookings > 0 ? Math.round(((totalBookings - totalCancelled) / totalBookings) * 100) : 100;
+
+    return { totalBookings, occupancyRate, totalRevenue, totalExpenses, netProfit, sportBreakdown, courtBreakdown, heatmap, heatmapMax, cashFlow, expenseBreakdown, totalClients, attendanceRate };
   }, [bookings, weekBookings, courts, sports, selectedDate, expenses, schedules]);
 
   const getHeatColor = (count: number, max: number) => {
@@ -115,7 +137,7 @@ const AdminAnalytics = () => {
         <p className="text-sm text-muted-foreground">Estadísticas y rendimiento del predio</p>
       </div>
 
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-3 mb-6 flex-wrap">
         <button onClick={() => setSelectedDate(addMonths(selectedDate, -1))} className="p-2 rounded-lg border border-border hover:bg-muted transition-colors"><ChevronLeft className="w-4 h-4" /></button>
         <span className="font-bold capitalize">{format(selectedDate, "MMMM yyyy", { locale: es })}</span>
         <button onClick={() => setSelectedDate(addMonths(selectedDate, 1))} className="p-2 rounded-lg border border-border hover:bg-muted transition-colors"><ChevronRight className="w-4 h-4" /></button>
@@ -124,25 +146,43 @@ const AdminAnalytics = () => {
 
       {/* Summary row */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-8">
-        <div className="glass-card rounded-2xl p-5">
+        <div className="glass-card rounded-2xl p-4 sm:p-5">
           <p className="text-xs text-muted-foreground mb-1">Ocupación</p>
-          <p className="text-3xl font-extrabold text-primary">{stats.occupancyRate}%</p>
+          <p className="text-2xl sm:text-3xl font-extrabold text-primary">{stats.occupancyRate}%</p>
         </div>
-        <div className="glass-card rounded-2xl p-5">
+        <div className="glass-card rounded-2xl p-4 sm:p-5">
           <p className="text-xs text-muted-foreground mb-1">Reservas</p>
-          <p className="text-3xl font-extrabold">{stats.totalBookings}</p>
+          <p className="text-2xl sm:text-3xl font-extrabold">{stats.totalBookings}</p>
         </div>
-        <div className="glass-card rounded-2xl p-5">
+        <div className="glass-card rounded-2xl p-4 sm:p-5">
           <p className="text-xs text-muted-foreground mb-1">Ingresos</p>
-          <p className="text-3xl font-extrabold text-primary">${stats.totalRevenue.toLocaleString()}</p>
+          <p className="text-2xl sm:text-3xl font-extrabold text-primary break-all">${stats.totalRevenue.toLocaleString()}</p>
         </div>
-        <div className="glass-card rounded-2xl p-5">
+        <div className="glass-card rounded-2xl p-4 sm:p-5">
           <p className="text-xs text-muted-foreground mb-1">Egresos</p>
-          <p className="text-3xl font-extrabold text-destructive">${stats.totalExpenses.toLocaleString()}</p>
+          <p className="text-2xl sm:text-3xl font-extrabold text-destructive break-all">${stats.totalExpenses.toLocaleString()}</p>
         </div>
-        <div className="glass-card rounded-2xl p-5 col-span-2 lg:col-span-1">
+        <div className="glass-card rounded-2xl p-4 sm:p-5 col-span-2 lg:col-span-1">
           <p className="text-xs text-muted-foreground mb-1">Ganancia neta</p>
-          <p className={cn("text-3xl font-extrabold", stats.netProfit >= 0 ? "text-primary" : "text-destructive")}>${stats.netProfit.toLocaleString()}</p>
+          <p className={cn("text-2xl sm:text-3xl font-extrabold break-all", stats.netProfit >= 0 ? "text-primary" : "text-destructive")}>${stats.netProfit.toLocaleString()}</p>
+        </div>
+      </div>
+
+      {/* Client stats row */}
+      <div className="grid grid-cols-2 gap-3 mb-8">
+        <div className="glass-card rounded-2xl p-4 sm:p-5 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center shrink-0"><Users className="w-5 h-5 text-primary" /></div>
+          <div>
+            <p className="text-xs text-muted-foreground">Clientes únicos</p>
+            <p className="text-2xl font-extrabold">{stats.totalClients}</p>
+          </div>
+        </div>
+        <div className="glass-card rounded-2xl p-4 sm:p-5 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center shrink-0"><Users className="w-5 h-5 text-primary" /></div>
+          <div>
+            <p className="text-xs text-muted-foreground">Asistencia mensual</p>
+            <p className="text-2xl font-extrabold text-primary">{stats.attendanceRate}%</p>
+          </div>
         </div>
       </div>
 
@@ -204,29 +244,58 @@ const AdminAnalytics = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Sport breakdown */}
         {stats.sportBreakdown.length > 0 && (
           <div className="glass-card rounded-2xl p-5">
             <h3 className="font-bold text-sm mb-4">⚽ Distribución por deporte</h3>
-            <div className="flex items-center justify-center gap-8 flex-wrap">
-              <div className="w-52 h-52">
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-44 h-44">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={stats.sportBreakdown} dataKey="value" nameKey="sport" cx="50%" cy="50%" outerRadius={80} innerRadius={50} paddingAngle={3} strokeWidth={0}>
+                    <Pie data={stats.sportBreakdown} dataKey="value" nameKey="sport" cx="50%" cy="50%" outerRadius={70} innerRadius={45} paddingAngle={3} strokeWidth={0}>
                       {stats.sportBreakdown.map((entry, i) => (<Cell key={i} fill={entry.color} />))}
                     </Pie>
                     <Tooltip formatter={(value: number, name: string) => [`${value} reservas`, name]} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-              <div className="space-y-3">
+              <div className="space-y-2 w-full">
                 {stats.sportBreakdown.map((s) => (
-                  <div key={s.sport} className="flex items-center gap-3">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: s.color }} />
-                    <span className="text-sm font-medium w-20">{s.sport}</span>
-                    <span className="text-sm font-bold">{s.percentage}%</span>
+                  <div key={s.sport} className="flex items-center gap-2 text-sm">
+                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                    <span className="font-medium truncate flex-1">{s.sport}</span>
+                    <span className="font-bold">{s.percentage}%</span>
                     <span className="text-xs text-muted-foreground">({s.value})</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Court breakdown */}
+        {stats.courtBreakdown.length > 0 && (
+          <div className="glass-card rounded-2xl p-5">
+            <h3 className="font-bold text-sm mb-4">🏟️ Distribución por cancha</h3>
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-44 h-44">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={stats.courtBreakdown} dataKey="value" nameKey="court" cx="50%" cy="50%" outerRadius={70} innerRadius={45} paddingAngle={3} strokeWidth={0}>
+                      {stats.courtBreakdown.map((entry, i) => (<Cell key={i} fill={entry.color} />))}
+                    </Pie>
+                    <Tooltip formatter={(value: number, name: string) => [`${value} reservas`, name]} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="space-y-2 w-full">
+                {stats.courtBreakdown.map((c) => (
+                  <div key={c.court} className="flex items-center gap-2 text-sm">
+                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: c.color }} />
+                    <span className="font-medium truncate flex-1">{c.court}</span>
+                    <span className="font-bold">{c.percentage}%</span>
+                    <span className="text-xs text-muted-foreground">({c.value})</span>
                   </div>
                 ))}
               </div>
@@ -238,23 +307,23 @@ const AdminAnalytics = () => {
         {stats.expenseBreakdown.length > 0 && (
           <div className="glass-card rounded-2xl p-5">
             <h3 className="font-bold text-sm mb-4 flex items-center gap-2"><TrendingDown className="w-4 h-4 text-destructive" /> Distribución de gastos</h3>
-            <div className="flex items-center justify-center gap-8 flex-wrap">
-              <div className="w-52 h-52">
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-44 h-44">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={stats.expenseBreakdown} dataKey="value" nameKey="category" cx="50%" cy="50%" outerRadius={80} innerRadius={50} paddingAngle={3} strokeWidth={0}>
+                    <Pie data={stats.expenseBreakdown} dataKey="value" nameKey="category" cx="50%" cy="50%" outerRadius={70} innerRadius={45} paddingAngle={3} strokeWidth={0}>
                       {stats.expenseBreakdown.map((entry, i) => (<Cell key={i} fill={entry.color} />))}
                     </Pie>
                     <Tooltip formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name]} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-              <div className="space-y-3">
+              <div className="space-y-2 w-full">
                 {stats.expenseBreakdown.map((e) => (
-                  <div key={e.category} className="flex items-center gap-3">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: e.color }} />
-                    <span className="text-sm font-medium w-20">{e.category}</span>
-                    <span className="text-sm font-bold">{e.percentage}%</span>
+                  <div key={e.category} className="flex items-center gap-2 text-sm">
+                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: e.color }} />
+                    <span className="font-medium truncate flex-1">{e.category}</span>
+                    <span className="font-bold">{e.percentage}%</span>
                     <span className="text-xs text-muted-foreground">(${e.value.toLocaleString()})</span>
                   </div>
                 ))}
