@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { format, parse } from "date-fns";
@@ -9,6 +9,7 @@ import PlayerLayout from "@/components/layout/PlayerLayout";
 import { cn } from "@/lib/utils";
 import { Check, MapPin, Clock, CreditCard, User, Mail, Phone, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 const Checkout = () => {
   const [params] = useSearchParams();
@@ -26,10 +27,68 @@ const Checkout = () => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
 
   const endHour = time ? parseInt(time.split(":")[0]) + 1 : 0;
   const endTime = `${endHour.toString().padStart(2, "0")}:00`;
   const dateObj = date ? parse(date, "yyyy-MM-dd", new Date()) : new Date();
+
+  // Handle MercadoPago return
+  const mpStatus = params.get("status");
+  const mpPaymentId = params.get("payment_id");
+  const mpFailed = params.get("mp_failed");
+
+  useEffect(() => {
+    if (mpFailed === "1") {
+      toast({ title: "El pago no se completó", description: "Podés intentar nuevamente.", variant: "destructive" });
+      return;
+    }
+
+    if (mpStatus === "approved" && mpPaymentId && !isConfirming) {
+      const stored = sessionStorage.getItem("pending_booking");
+      if (!stored) return;
+      setIsConfirming(true);
+      const bookingData = JSON.parse(stored);
+      sessionStorage.removeItem("pending_booking");
+
+      createBooking
+        .mutateAsync({
+          court_id: bookingData.court_id,
+          date: bookingData.date,
+          time: bookingData.time,
+          user_name: bookingData.user_name,
+          user_email: bookingData.user_email,
+          user_phone: bookingData.user_phone,
+          total_price: bookingData.total_price,
+          deposit_amount: bookingData.deposit_amount,
+          payment_status: bookingData.payment_status,
+          booking_type: "online",
+          addon_ids: bookingData.addon_ids,
+        })
+        .then(() => {
+          const confirmParams = new URLSearchParams({
+            court: bookingData.court_id,
+            courtName: bookingData.court_name,
+            date: bookingData.date,
+            time: bookingData.time,
+            endTime: bookingData.end_time,
+            total: bookingData.total_price.toString(),
+            deposit: bookingData.deposit_amount.toString(),
+            addons: (bookingData.addon_ids || []).join(","),
+          });
+          navigate(tp(`/confirmation?${confirmParams.toString()}`), { replace: true });
+        })
+        .catch((err: any) => {
+          setIsConfirming(false);
+          if (err?.message?.includes("SLOT_TAKEN")) {
+            toast({ title: "¡Ese horario ya fue reservado!", description: "Elegí otro horario", variant: "destructive" });
+          } else {
+            toast({ title: "Error al crear la reserva", description: err?.message, variant: "destructive" });
+          }
+        });
+    }
+  }, [mpStatus, mpPaymentId, mpFailed]);
 
   const addonsTotal = useMemo(
     () => addons.filter((a) => selectedAddons.includes(a.id)).reduce((sum, a) => sum + a.price, 0),
@@ -40,35 +99,82 @@ const Checkout = () => {
 
   if (!court || !date || !time) return null;
 
+  // Show loading while confirming booking after MP return
+  if (isConfirming || (mpStatus === "approved" && mpPaymentId)) {
+    return (
+      <PlayerLayout title="Procesando...">
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <span className="text-sm text-muted-foreground">Confirmando tu reserva...</span>
+        </div>
+      </PlayerLayout>
+    );
+  }
+
   const toggleAddon = (id: string) =>
     setSelectedAddons((prev) => (prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]));
 
   const isValid = name.trim().length >= 2 && /\S+@\S+\.\S+/.test(email) && phone.trim().length >= 8;
 
   const handlePay = async () => {
-    if (!isValid) { toast({ title: "Completá todos los campos correctamente", variant: "destructive" }); return; }
+    if (!isValid) {
+      toast({ title: "Completá todos los campos correctamente", variant: "destructive" });
+      return;
+    }
+    setIsProcessing(true);
+
     try {
-      await createBooking.mutateAsync({
-        court_id: courtId!, date, time,
-        user_name: name.trim(), user_email: email.trim(), user_phone: phone.trim(),
-        total_price: total,
-        deposit_amount: payDeposit ? depositAmount : total,
-        payment_status: payDeposit ? "partial" : "full",
-        booking_type: "online",
-        addon_ids: selectedAddons,
+      const amountToPay = payDeposit ? depositAmount : total;
+      const paymentDesc = payDeposit
+        ? `Seña - ${court.name} (${date} ${time})`
+        : `Reserva - ${court.name} (${date} ${time})`;
+
+      // Save booking data for after MercadoPago return
+      sessionStorage.setItem(
+        "pending_booking",
+        JSON.stringify({
+          court_id: courtId,
+          court_name: court.name,
+          date,
+          time,
+          end_time: endTime,
+          user_name: name.trim(),
+          user_email: email.trim(),
+          user_phone: phone.trim(),
+          total_price: total,
+          deposit_amount: payDeposit ? depositAmount : total,
+          payment_status: payDeposit ? "partial" : "full",
+          addon_ids: selectedAddons,
+        })
+      );
+
+      // Build return URL (same checkout page so we can process the booking)
+      const currentUrl = window.location.href.split("?")[0];
+      const backBase = `${currentUrl}?court=${courtId}&date=${date}&time=${time}`;
+
+      const { data, error } = await supabase.functions.invoke("mercadopago-checkout", {
+        body: {
+          title: paymentDesc,
+          unit_price: amountToPay,
+          back_urls: {
+            success: backBase,
+            failure: `${backBase}&mp_failed=1`,
+            pending: `${backBase}&mp_pending=1`,
+          },
+        },
       });
-      const confirmParams = new URLSearchParams({
-        court: courtId!, courtName: court.name, date, time, endTime,
-        total: total.toString(), deposit: payDeposit ? depositAmount.toString() : total.toString(),
-        addons: selectedAddons.join(","),
-      });
-      navigate(tp(`/confirmation?${confirmParams.toString()}`));
-    } catch (err: any) {
-      if (err?.message?.includes("SLOT_TAKEN")) {
-        toast({ title: "¡Ese horario ya fue reservado!", description: "Elegí otro horario", variant: "destructive" });
+
+      if (error) throw error;
+
+      const redirectUrl = data.init_point || data.sandbox_init_point;
+      if (redirectUrl) {
+        window.location.href = redirectUrl;
       } else {
-        toast({ title: "Error al reservar", description: err?.message, variant: "destructive" });
+        throw new Error("No se obtuvo URL de pago de MercadoPago");
       }
+    } catch (err: any) {
+      toast({ title: "Error al iniciar el pago", description: err?.message, variant: "destructive" });
+      setIsProcessing(false);
     }
   };
 
@@ -150,10 +256,14 @@ const Checkout = () => {
               <span className="text-sm text-muted-foreground">Total</span>
               <span className="font-extrabold text-lg">${total.toLocaleString()}</span>
             </div>
-            <button onClick={handlePay} disabled={createBooking.isPending || !isValid}
+            <button onClick={handlePay} disabled={isProcessing || !isValid}
               className="w-full bg-primary text-primary-foreground py-3.5 rounded-xl font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2">
-              {createBooking.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-              {payDeposit ? `Pagar seña $${depositAmount.toLocaleString()}` : `Pagar $${total.toLocaleString()}`}
+              {isProcessing && <Loader2 className="w-4 h-4 animate-spin" />}
+              {isProcessing
+                ? "Redirigiendo a MercadoPago..."
+                : payDeposit
+                ? `Pagar seña $${depositAmount.toLocaleString()}`
+                : `Pagar $${total.toLocaleString()}`}
             </button>
           </div>
         </div>
