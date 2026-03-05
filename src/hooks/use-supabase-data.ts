@@ -316,13 +316,18 @@ export function useUpsertFacilitySchedule() {
   return useMutation({
     mutationFn: async (schedules: { day_of_week: number; is_open: boolean; open_time: string; close_time: string }[]) => {
       if (!facilityId) throw new Error("No facility");
-      for (const s of schedules) {
-        const { error } = await supabase.from("facility_schedules").upsert(
-          { facility_id: facilityId, day_of_week: s.day_of_week, is_open: s.is_open, open_time: s.open_time, close_time: s.close_time },
-          { onConflict: "facility_id,day_of_week" }
-        );
-        if (error) throw error;
-      }
+      // Delete existing schedules for this facility, then insert fresh
+      const { error: delError } = await supabase.from("facility_schedules").delete().eq("facility_id", facilityId);
+      if (delError) throw delError;
+      const rows = schedules.map((s) => ({
+        facility_id: facilityId,
+        day_of_week: s.day_of_week,
+        is_open: s.is_open,
+        open_time: s.open_time,
+        close_time: s.close_time,
+      }));
+      const { error: insError } = await supabase.from("facility_schedules").insert(rows);
+      if (insError) throw insError;
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["facility-schedules"] }); },
   });
