@@ -47,7 +47,7 @@ const Landing = () => {
             <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-extrabold text-base">
               S
             </div>
-            <span className="font-extrabold text-lg">Spordate</span>
+            <span className="font-extrabold text-lg">MySpordate</span>
           </div>
 
           {/* Desktop nav */}
@@ -133,7 +133,7 @@ const Landing = () => {
                 <div className="w-3 h-3 rounded-full bg-destructive/60" />
                 <div className="w-3 h-3 rounded-full bg-warning/60" />
                 <div className="w-3 h-3 rounded-full bg-primary/60" />
-                <span className="ml-3 text-xs text-sidebar-foreground/50 font-medium">spordate.com/admin</span>
+                <span className="ml-3 text-xs text-sidebar-foreground/50 font-medium">MySpordate.com/admin</span>
               </div>
               {/* Mock content */}
               <div className="p-4 md:p-6 grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
@@ -351,7 +351,7 @@ const Landing = () => {
             </motion.h2>
             <motion.p variants={fadeUp} custom={1}
               className="text-base sm:text-lg text-secondary-foreground/60 max-w-lg mx-auto mb-8">
-              Empezá a usar Spordate hoy mismo. Sin costo inicial, sin compromiso. Tu predio lo merece.
+              Empezá a usar MySpordate hoy mismo. Sin costo inicial, sin compromiso. Tu predio lo merece.
             </motion.p>
             <motion.div variants={fadeUp} custom={2}>
               <button onClick={() => navigate("/auth/login")}
@@ -368,15 +368,15 @@ const Landing = () => {
         <div className="container flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-extrabold text-sm">S</div>
-            <span className="font-extrabold text-base">Spordate</span>
+            <span className="font-extrabold text-base">MySpordate</span>
           </div>
           <div className="flex items-center gap-6 text-xs text-secondary-foreground/50">
             <a href="#" className="hover:text-primary transition-colors">Términos</a>
             <a href="#" className="hover:text-primary transition-colors">Privacidad</a>
             <a href="#" className="hover:text-primary transition-colors">Soporte</a>
-            <span>contacto@spordate.com</span>
+            <span>contacto@MySpordate.com</span>
           </div>
-          <p className="text-xs text-secondary-foreground/30">© {new Date().getFullYear()} Spordate. Todos los derechos reservados.</p>
+          <p className="text-xs text-secondary-foreground/30">© {new Date().getFullYear()} MySpordate. Todos los derechos reservados.</p>
         </div>
       </footer>
 

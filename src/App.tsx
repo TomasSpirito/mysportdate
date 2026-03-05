@@ -8,6 +8,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import TenantRoute from "@/components/TenantRoute";
 import Landing from "./pages/Landing";
 import Login from "./pages/auth/Login";
+import UpdatePassword from "./pages/auth/UpdatePassword"; // <-- NUEVA IMPORTACIÓN
 import Index from "./pages/Index";
 import Courts from "./pages/Courts";
 import BookingCalendar from "./pages/BookingCalendar";
@@ -36,6 +37,7 @@ const App = () => (
             {/* Landing & Auth */}
             <Route path="/" element={<Landing />} />
             <Route path="/auth/login" element={<Login />} />
+            <Route path="/auth/update-password" element={<UpdatePassword />} /> {/* <-- NUEVA RUTA */}
 
             {/* Public tenant pages */}
             <Route path="/predio/:slug" element={<TenantRoute />}>
