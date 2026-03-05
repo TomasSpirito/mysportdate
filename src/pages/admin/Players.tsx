@@ -1,5 +1,5 @@
 import AdminLayout from "@/components/layout/AdminLayout";
-import { useBookingsRange, useCourts } from "@/hooks/use-supabase-data";
+import { useBookingsRange } from "@/hooks/use-supabase-data";
 import { useMemo, useState } from "react";
 import { format, startOfMonth, endOfMonth, addMonths } from "date-fns";
 import { es } from "date-fns/locale";
@@ -23,16 +23,13 @@ const AdminPlayers = () => {
   const monthStart = format(startOfMonth(selectedDate), "yyyy-MM-dd");
   const monthEnd = format(endOfMonth(selectedDate), "yyyy-MM-dd");
 
-  // Also fetch all-time bookings (last 12 months for comprehensive data)
-  const allStart = format(addMonths(startOfMonth(selectedDate), -11), "yyyy-MM-dd");
-  const { data: allBookings = [] } = useBookingsRange(allStart, monthEnd);
   const { data: monthBookings = [] } = useBookingsRange(monthStart, monthEnd);
-  const { data: courts = [] } = useCourts();
+  
 
   const clients = useMemo(() => {
     const map = new Map<string, ClientData>();
 
-    allBookings.forEach((b) => {
+    monthBookings.forEach((b) => {
       const key = (b.user_phone || b.user_name || "").toLowerCase().trim();
       if (!key) return;
       const existing = map.get(key) || {
@@ -60,7 +57,7 @@ const AdminPlayers = () => {
         attendanceRate: c.totalBookings > 0 ? Math.round(((c.totalBookings - c.cancelledBookings) / c.totalBookings) * 100) : 100,
       }))
       .sort((a, b) => b.totalBookings - a.totalBookings);
-  }, [allBookings]);
+  }, [monthBookings]);
 
   const monthStats = useMemo(() => {
     const uniquePhones = new Set(monthBookings.map((b) => b.user_phone || b.user_name).filter(Boolean));
