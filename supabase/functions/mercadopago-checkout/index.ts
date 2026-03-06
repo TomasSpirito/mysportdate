@@ -22,7 +22,6 @@ serve(async (req: Request) => {
 
   try {
     const payload = await req.json();
-    
     // Usamos las URLs que manda el frontend
     const successUrl = payload.back_urls?.success || "https://mysportdate.vercel.app/";
     const failureUrl = payload.back_urls?.failure || "https://mysportdate.vercel.app/";
@@ -44,8 +43,10 @@ serve(async (req: Request) => {
       },
       auto_return: "approved",
       external_reference: payload.external_reference || "RESERVA",
-      // ACÁ ESTÁ EL SECRETO: Guardamos los datos de la reserva ocultos en MP
       metadata: payload.booking_data || {},
+      
+      // LA LÍNEA MÁGICA: Obliga a MP a mandar el aviso acá sí o sí
+      notification_url: "https://acfbifypaqbbokxvkmpo.supabase.co/functions/v1/mercadopago-webhook",
     };
 
     const mpRes = await fetch("https://api.mercadopago.com/checkout/preferences", {
