@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { format, parse } from "date-fns";
 import { es } from "date-fns/locale";
-import { useCourt, useAddons, useCreateBooking } from "@/hooks/use-supabase-data";
+import { useCourt, useAddons } from "@/hooks/use-supabase-data";
 import { useTenantPath } from "@/hooks/use-tenant";
 import PlayerLayout from "@/components/layout/PlayerLayout";
 import { cn } from "@/lib/utils";
@@ -20,7 +20,6 @@ const Checkout = () => {
   const time = params.get("time");
   const { data: court } = useCourt(courtId || undefined);
   const { data: addons = [] } = useAddons();
-  const createBooking = useCreateBooking();
 
   const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
   const [payDeposit, setPayDeposit] = useState(true);
@@ -34,61 +33,9 @@ const Checkout = () => {
   const endTime = `${endHour.toString().padStart(2, "0")}:00`;
   const dateObj = date ? parse(date, "yyyy-MM-dd", new Date()) : new Date();
 
-  // Handle MercadoPago return
+  // Variables de Mercado Pago
   const mpStatus = params.get("status");
-  const mpPaymentId = params.get("payment_id");
   const mpFailed = params.get("mp_failed");
-
-  useEffect(() => {
-    if (mpFailed === "1") {
-      toast({ title: "El pago no se completó", description: "Podés intentar nuevamente.", variant: "destructive" });
-      return;
-    }
-
-    if (mpStatus === "approved" && mpPaymentId && !isConfirming) {
-      const stored = sessionStorage.getItem("pending_booking");
-      if (!stored) return;
-      setIsConfirming(true);
-      const bookingData = JSON.parse(stored);
-      sessionStorage.removeItem("pending_booking");
-
-      createBooking
-        .mutateAsync({
-          court_id: bookingData.court_id,
-          date: bookingData.date,
-          time: bookingData.time,
-          user_name: bookingData.user_name,
-          user_email: bookingData.user_email,
-          user_phone: bookingData.user_phone,
-          total_price: bookingData.total_price,
-          deposit_amount: bookingData.deposit_amount,
-          payment_status: bookingData.payment_status,
-          booking_type: "online",
-          addon_ids: bookingData.addon_ids,
-        })
-        .then(() => {
-          const confirmParams = new URLSearchParams({
-            court: bookingData.court_id,
-            courtName: bookingData.court_name,
-            date: bookingData.date,
-            time: bookingData.time,
-            endTime: bookingData.end_time,
-            total: bookingData.total_price.toString(),
-            deposit: bookingData.deposit_amount.toString(),
-            addons: (bookingData.addon_ids || []).join(","),
-          });
-          navigate(tp(`/confirmation?${confirmParams.toString()}`), { replace: true });
-        })
-        .catch((err: any) => {
-          setIsConfirming(false);
-          if (err?.message?.includes("SLOT_TAKEN")) {
-            toast({ title: "¡Ese horario ya fue reservado!", description: "Elegí otro horario", variant: "destructive" });
-          } else {
-            toast({ title: "Error al crear la reserva", description: err?.message, variant: "destructive" });
-          }
-        });
-    }
-  }, [mpStatus, mpPaymentId, mpFailed]);
 
   const addonsTotal = useMemo(
     () => addons.filter((a) => selectedAddons.includes(a.id)).reduce((sum, a) => sum + a.price, 0),
@@ -97,10 +44,34 @@ const Checkout = () => {
   const total = (court?.price_per_hour || 0) + addonsTotal;
   const depositAmount = Math.round(total * 0.4);
 
+  useEffect(() => {
+    // Si falla o se cancela
+    if (mpFailed === "1" || mpStatus === "failure" || mpStatus === "null") {
+      toast({ title: "El pago no se completó", description: "Podés intentar nuevamente.", variant: "destructive" });
+      return;
+    }
+
+    // Si el pago es exitoso, YA NO CREAMOS LA RESERVA ACÁ. Lo hará el Webhook.
+    // Simplemente le mostramos al usuario la pantalla de éxito.
+    if (mpStatus === "approved" && !isConfirming) {
+      setIsConfirming(true);
+      const confirmParams = new URLSearchParams({
+        court: courtId || "",
+        courtName: court?.name || "",
+        date: date || "",
+        time: time || "",
+        endTime: endTime,
+        total: total.toString(),
+        deposit: payDeposit ? depositAmount.toString() : total.toString(),
+        addons: selectedAddons.join(","),
+      });
+      navigate(tp(`/confirmation?${confirmParams.toString()}`), { replace: true });
+    }
+  }, [mpStatus, mpFailed, isConfirming, navigate, tp, courtId, court?.name, date, time, endTime, total, payDeposit, depositAmount, selectedAddons]);
+
   if (!court || !date || !time) return null;
 
-  // Show loading while confirming booking after MP return
-  if (isConfirming || (mpStatus === "approved" && mpPaymentId)) {
+  if (isConfirming) {
     return (
       <PlayerLayout title="Procesando...">
         <div className="flex flex-col items-center justify-center py-20 gap-3">
@@ -129,37 +100,30 @@ const Checkout = () => {
         ? `Seña - ${court.name} (${date} ${time})`
         : `Reserva - ${court.name} (${date} ${time})`;
 
-      // Save booking data for after MercadoPago return
-      sessionStorage.setItem(
-        "pending_booking",
-        JSON.stringify({
-          court_id: courtId,
-          court_name: court.name,
-          date,
-          time,
-          end_time: endTime,
-          user_name: name.trim(),
-          user_email: email.trim(),
-          user_phone: phone.trim(),
-          total_price: total,
-          deposit_amount: payDeposit ? depositAmount : total,
-          payment_status: payDeposit ? "partial" : "full",
-          addon_ids: selectedAddons,
-        })
-      );
-
-      // Build return URL (same checkout page so we can process the booking)
       const currentUrl = window.location.href.split("?")[0];
       const backBase = `${currentUrl}?court=${courtId}&date=${date}&time=${time}`;
 
+      // ACÁ ESTÁ LA MAGIA: Le mandamos todos los datos de la reserva a la función
       const { data, error } = await supabase.functions.invoke("mercadopago-checkout", {
         body: {
           title: paymentDesc,
           unit_price: amountToPay,
+          booking_data: {
+            court_id: courtId,
+            date: date,
+            time: time,
+            user_name: name.trim(),
+            user_email: email.trim(),
+            user_phone: phone.trim(),
+            total_price: total,
+            deposit_amount: payDeposit ? depositAmount : total,
+            payment_status: payDeposit ? "partial" : "full",
+            addon_ids: selectedAddons.join(","), // Lo pasamos como texto simple
+          },
           back_urls: {
-            success: backBase,
-            failure: `${backBase}&mp_failed=1`,
-            pending: `${backBase}&mp_pending=1`,
+            success: `${backBase}&status=approved`,
+            failure: `${backBase}&status=failure`,
+            pending: `${backBase}&status=pending`,
           },
         },
       });
@@ -172,8 +136,9 @@ const Checkout = () => {
       } else {
         throw new Error("No se obtuvo URL de pago de MercadoPago");
       }
-    } catch (err: any) {
-      toast({ title: "Error al iniciar el pago", description: err?.message, variant: "destructive" });
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Error desconocido";
+      toast({ title: "Error al iniciar el pago", description: errorMsg, variant: "destructive" });
       setIsProcessing(false);
     }
   };
