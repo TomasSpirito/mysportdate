@@ -18,6 +18,8 @@ const Checkout = () => {
   const courtId = params.get("court");
   const date = params.get("date");
   const time = params.get("time");
+  
+  // Estas consultas tardan unos milisegundos en traer datos
   const { data: court } = useCourt(courtId || undefined);
   const { data: addons = [] } = useAddons();
 
@@ -41,9 +43,12 @@ const Checkout = () => {
     () => addons.filter((a) => selectedAddons.includes(a.id)).reduce((sum, a) => sum + a.price, 0),
     [selectedAddons, addons]
   );
-  const total = (court?.price_per_hour || 0) + addonsTotal;
+  
+  // Solo calculamos el total si 'court' ya cargó
+  const total = court ? (court.price_per_hour + addonsTotal) : 0;
   const depositAmount = Math.round(total * 0.4);
 
+  // 1. EL USE EFFECT DEBE ESTAR ARRIBA (Antes del if de retorno)
   useEffect(() => {
     // Si falla o se cancela
     if (mpFailed === "1" || mpStatus === "failure" || mpStatus === "null") {
@@ -51,12 +56,12 @@ const Checkout = () => {
       return;
     }
 
-    // EL FIX: Agregamos "&& court" para que espere a saber el precio
+    // Si está aprobado, esperamos a que 'court' tenga datos para armar la URL
     if (mpStatus === "approved" && !isConfirming && court) {
       setIsConfirming(true);
       const confirmParams = new URLSearchParams({
         court: courtId || "",
-        courtName: court.name, // Ya sabemos que court existe
+        courtName: court.name,
         date: date || "",
         time: time || "",
         endTime: endTime,
@@ -67,6 +72,21 @@ const Checkout = () => {
       navigate(tp(`/confirmation?${confirmParams.toString()}`), { replace: true });
     }
   }, [mpStatus, mpFailed, isConfirming, navigate, tp, courtId, court, date, time, endTime, total, payDeposit, depositAmount, selectedAddons]);
+
+  // 2. LA PANTALLA DE CARGA (Para cuando vuelve de MP)
+  if (isConfirming || mpStatus === "approved") {
+    return (
+      <PlayerLayout title="Procesando...">
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <span className="text-sm text-muted-foreground">Generando tu comprobante...</span>
+        </div>
+      </PlayerLayout>
+    );
+  }
+
+  // 3. EL FILTRO DE SEGURIDAD (Si faltan datos y no estamos volviendo de un pago, no mostramos nada)
+  if (!court || !date || !time) return null;
 
   const toggleAddon = (id: string) =>
     setSelectedAddons((prev) => (prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]));
@@ -89,7 +109,6 @@ const Checkout = () => {
       const currentUrl = window.location.href.split("?")[0];
       const backBase = `${currentUrl}?court=${courtId}&date=${date}&time=${time}`;
 
-      // ACÁ ESTÁ LA MAGIA: Le mandamos todos los datos de la reserva a la función
       const { data, error } = await supabase.functions.invoke("mercadopago-checkout", {
         body: {
           title: paymentDesc,
@@ -104,7 +123,7 @@ const Checkout = () => {
             total_price: total,
             deposit_amount: payDeposit ? depositAmount : total,
             payment_status: payDeposit ? "partial" : "full",
-            addon_ids: selectedAddons.join(","), // Lo pasamos como texto simple
+            addon_ids: selectedAddons.join(","),
           },
           back_urls: {
             success: `${backBase}&status=approved`,
