@@ -22,9 +22,10 @@ serve(async (req: Request) => {
 
   try {
     const payload = await req.json();
-    
-    // SOLUCIÓN DEFINITIVA: Usamos tu dominio de Vercel que ya es HTTPS y válido para MP
-    const productionUrl = "https://mysportdate.vercel.app/";
+    // Usamos las URLs que manda el frontend
+    const successUrl = payload.back_urls?.success || "https://mysportdate.vercel.app/";
+    const failureUrl = payload.back_urls?.failure || "https://mysportdate.vercel.app/";
+    const pendingUrl = payload.back_urls?.pending || "https://mysportdate.vercel.app/";
 
     const preference = {
       items: [
@@ -36,12 +37,16 @@ serve(async (req: Request) => {
         },
       ],
       back_urls: {
-        success: productionUrl,
-        failure: productionUrl,
-        pending: productionUrl
+        success: successUrl,
+        failure: failureUrl,
+        pending: pendingUrl
       },
       auto_return: "approved",
       external_reference: payload.external_reference || "RESERVA",
+      metadata: payload.booking_data || {},
+      
+      // LA LÍNEA MÁGICA: Obliga a MP a mandar el aviso acá sí o sí
+      notification_url: "https://acfbifypaqbbokxvkmpo.supabase.co/functions/v1/mercadopago-webhook",
     };
 
     const mpRes = await fetch("https://api.mercadopago.com/checkout/preferences", {
