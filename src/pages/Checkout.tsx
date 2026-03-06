@@ -51,13 +51,12 @@ const Checkout = () => {
       return;
     }
 
-    // Si el pago es exitoso, YA NO CREAMOS LA RESERVA ACÁ. Lo hará el Webhook.
-    // Simplemente le mostramos al usuario la pantalla de éxito.
-    if (mpStatus === "approved" && !isConfirming) {
+    // EL FIX: Agregamos "&& court" para que espere a saber el precio
+    if (mpStatus === "approved" && !isConfirming && court) {
       setIsConfirming(true);
       const confirmParams = new URLSearchParams({
         court: courtId || "",
-        courtName: court?.name || "",
+        courtName: court.name, // Ya sabemos que court existe
         date: date || "",
         time: time || "",
         endTime: endTime,
@@ -67,20 +66,7 @@ const Checkout = () => {
       });
       navigate(tp(`/confirmation?${confirmParams.toString()}`), { replace: true });
     }
-  }, [mpStatus, mpFailed, isConfirming, navigate, tp, courtId, court?.name, date, time, endTime, total, payDeposit, depositAmount, selectedAddons]);
-
-  if (!court || !date || !time) return null;
-
-  if (isConfirming) {
-    return (
-      <PlayerLayout title="Procesando...">
-        <div className="flex flex-col items-center justify-center py-20 gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          <span className="text-sm text-muted-foreground">Confirmando tu reserva...</span>
-        </div>
-      </PlayerLayout>
-    );
-  }
+  }, [mpStatus, mpFailed, isConfirming, navigate, tp, courtId, court, date, time, endTime, total, payDeposit, depositAmount, selectedAddons]);
 
   const toggleAddon = (id: string) =>
     setSelectedAddons((prev) => (prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]));
