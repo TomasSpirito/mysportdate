@@ -30,17 +30,12 @@ const AdminDashboard = () => {
   const todaySchedule = schedules.find((s) => s.day_of_week === dayIdx);
   const isClosed = todaySchedule ? !todaySchedule.is_open : false;
 
-  // Build hours from schedule
+  // Build hours from schedule — each entry represents a 1-hour block (e.g. "22:00" = 22:00–23:00)
   const hours: string[] = [];
-  if (todaySchedule && todaySchedule.is_open) {
-    const openH = parseInt(todaySchedule.open_time.split(":")[0]);
-    const closeH = parseInt(todaySchedule.close_time.split(":")[0]);
+  const openH = todaySchedule?.is_open ? parseInt(todaySchedule.open_time.split(":")[0]) : (!todaySchedule ? 8 : -1);
+  const closeH = todaySchedule?.is_open ? parseInt(todaySchedule.close_time.split(":")[0]) : (!todaySchedule ? 23 : -1);
+  if (openH >= 0 && closeH > openH) {
     for (let h = openH; h < closeH; h++) {
-      hours.push(`${h.toString().padStart(2, "0")}:00`);
-    }
-  } else if (!todaySchedule) {
-    // Default if no schedule configured
-    for (let h = 8; h < 23; h++) {
       hours.push(`${h.toString().padStart(2, "0")}:00`);
     }
   }

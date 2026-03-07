@@ -1,9 +1,9 @@
 import { useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { format, addDays } from "date-fns";
+import { format, addDays, getDay } from "date-fns";
 import { es } from "date-fns/locale";
-import { useCourt, useBookingsByCourt, generateAvailableSlots } from "@/hooks/use-supabase-data";
+import { useCourt, useBookingsByCourt, generateAvailableSlots, useFacilitySchedulesByFacilityId } from "@/hooks/use-supabase-data";
 import { useTenantPath } from "@/hooks/use-tenant";
 import PlayerLayout from "@/components/layout/PlayerLayout";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,7 @@ const BookingCalendar = () => {
   const navigate = useNavigate();
   const tp = useTenantPath();
   const { data: court, isLoading: loadingCourt } = useCourt(courtId);
+  const { data: schedules = [] } = useFacilitySchedulesByFacilityId(court?.facility_id);
 
   const today = new Date();
   const dates = Array.from({ length: 14 }, (_, i) => addDays(today, i));
@@ -23,7 +24,25 @@ const BookingCalendar = () => {
   const dateStr = format(selectedDate, "yyyy-MM-dd");
   const { data: bookings = [] } = useBookingsByCourt(courtId, dateStr);
 
-  const slots = useMemo(() => generateAvailableSlots(bookings, dateStr), [bookings, dateStr]);
+  // Get schedule for the selected date's day of week (0=Mon...6=Sun)
+  const jsDay = getDay(selectedDate); // 0=Sun,1=Mon,...6=Sat
+  const dayIdx = jsDay === 0 ? 6 : jsDay - 1; // 0=Mon,...6=Sun
+  const daySchedule = schedules.find((s) => s.day_of_week === dayIdx);
+  const isDayClosed = daySchedule ? !daySchedule.is_open : false;
+
+  // Check if a date is closed
+  const isDateClosed = (date: Date) => {
+    const js = getDay(date);
+    const idx = js === 0 ? 6 : js - 1;
+    const sched = schedules.find((s) => s.day_of_week === idx);
+    return sched ? !sched.is_open : false;
+  };
+
+  // Dynamic open/close hours
+  const openHour = daySchedule?.is_open ? parseInt(daySchedule.open_time.split(":")[0]) : 8;
+  const closeHour = daySchedule?.is_open ? parseInt(daySchedule.close_time.split(":")[0]) : 23;
+
+  const slots = useMemo(() => generateAvailableSlots(bookings, dateStr, openHour, closeHour), [bookings, dateStr, openHour, closeHour]);
   const availableSlots = slots.filter((s) => s.available);
 
   if (loadingCourt) return <PlayerLayout><div className="container py-10 text-center text-muted-foreground">Cargando...</div></PlayerLayout>;
@@ -50,13 +69,17 @@ const BookingCalendar = () => {
           <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide">
             {dates.map((date) => {
               const isSelected = format(date, "yyyy-MM-dd") === format(selectedDate, "yyyy-MM-dd");
+              const closed = isDateClosed(date);
               return (
-                <button key={date.toISOString()} onClick={() => { setSelectedDate(date); setSelectedTime(null); }}
+                <button key={date.toISOString()}
+                  onClick={() => { if (!closed) { setSelectedDate(date); setSelectedTime(null); } }}
+                  disabled={closed}
                   className={cn("flex flex-col items-center min-w-[60px] py-2.5 px-3 rounded-xl text-xs font-medium transition-all border shrink-0",
+                    closed ? "bg-muted/50 border-border opacity-40 cursor-not-allowed line-through" :
                     isSelected ? "bg-primary text-primary-foreground border-primary shadow-md" : "bg-card border-border hover:border-primary/50")}>
                   <span className="uppercase text-[10px] opacity-70">{format(date, "EEE", { locale: es })}</span>
                   <span className="text-lg font-bold">{format(date, "d")}</span>
-                  <span className="text-[10px] opacity-70">{format(date, "MMM", { locale: es })}</span>
+                  <span className="text-[10px] opacity-70">{closed ? "Cerrado" : format(date, "MMM", { locale: es })}</span>
                 </button>
               );
             })}
@@ -68,9 +91,15 @@ const BookingCalendar = () => {
           <div className="flex items-center gap-2 mb-3">
             <Clock className="w-4 h-4 text-primary" />
             <span className="text-sm font-semibold">Horarios disponibles</span>
-            <span className="ml-auto text-xs text-muted-foreground">{availableSlots.length} libres</span>
+            {!isDayClosed && <span className="ml-auto text-xs text-muted-foreground">{availableSlots.length} libres</span>}
           </div>
-          {availableSlots.length === 0 ? (
+          {isDayClosed ? (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-10 rounded-2xl bg-muted/50">
+              <p className="text-4xl mb-2">🚫</p>
+              <p className="font-semibold text-sm">Cerrado este día</p>
+              <p className="text-xs text-muted-foreground mt-1">Elegí otra fecha para reservar</p>
+            </motion.div>
+          ) : availableSlots.length === 0 ? (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-10 rounded-2xl bg-muted/50">
               <p className="text-4xl mb-2">😕</p>
               <p className="font-semibold text-sm">No hay turnos disponibles</p>

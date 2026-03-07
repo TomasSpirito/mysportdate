@@ -131,13 +131,27 @@ export function useBookingsByCourt(courtId?: string, date?: string) {
   });
 }
 
-export function generateAvailableSlots(bookings: Booking[], date: string) {
+export function generateAvailableSlots(bookings: Booking[], date: string, openHour = 8, closeHour = 23) {
   const occupiedHours = new Set(bookings.map((b) => new Date(b.start_time).getUTCHours()));
   const slots: { time: string; available: boolean }[] = [];
-  for (let h = 8; h <= 23; h++) {
+  for (let h = openHour; h < closeHour; h++) {
     slots.push({ time: `${h.toString().padStart(2, "0")}:00`, available: !occupiedHours.has(h) });
   }
   return slots;
+}
+
+// Fetch schedules by facility_id (for player-side, without FacilityContext)
+export function useFacilitySchedulesByFacilityId(facilityId?: string) {
+  return useQuery({
+    queryKey: ["facility-schedules-public", facilityId],
+    queryFn: async () => {
+      if (!facilityId) return [];
+      const { data, error } = await supabase.from("facility_schedules").select("*").eq("facility_id", facilityId).order("day_of_week");
+      if (error) throw error;
+      return data as FacilitySchedule[];
+    },
+    enabled: !!facilityId,
+  });
 }
 
 // ── Mutations ──
