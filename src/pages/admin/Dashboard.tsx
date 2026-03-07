@@ -30,17 +30,21 @@ const AdminDashboard = () => {
   const todaySchedule = schedules.find((s) => s.day_of_week === dayIdx);
   const isClosed = todaySchedule ? !todaySchedule.is_open : false;
 
-  // Build hours from schedule — each entry represents a 1-hour block (e.g. "22:00" = 22:00–23:00)
-  const hours: string[] = [];
+  // Obtenemos las horas
   const openH = todaySchedule?.is_open ? parseInt(todaySchedule.open_time.split(":")[0]) : (!todaySchedule ? 8 : -1);
   let closeH = todaySchedule?.is_open ? parseInt(todaySchedule.close_time.split(":")[0]) : (!todaySchedule ? 23 : -1);
-  
-  // EL FIX PARA LA MEDIANOCHE: Si cierra a las 00, lo tratamos como las 24hs
-  if (closeH === 0) closeH = 24;
 
+  // LA MAGIA DE LA MADRUGADA: Si cierra más temprano de lo que abre, es el día siguiente
+  if (closeH <= openH && closeH >= 0) {
+    closeH += 24;
+  }
+
+  // Build hours from schedule
+  const hours: string[] = [];
   if (openH >= 0 && closeH > openH) {
     for (let h = openH; h < closeH; h++) {
-      hours.push(`${h.toString().padStart(2, "0")}:00`);
+      const displayH = h % 24; // Convierte el 24 en 00, el 25 en 01, etc.
+      hours.push(`${displayH.toString().padStart(2, "0")}:00`);
     }
   }
 
