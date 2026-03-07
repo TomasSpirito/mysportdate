@@ -23,9 +23,9 @@ serve(async (req: Request) => {
         const meta = paymentData.metadata;
         console.log("Pago aprobado. Metadata oculta:", meta);
 
-        // --- TRANSFORMACIÓN DE FECHAS PARA TU BASE DE DATOS ---
-        // Combinamos la fecha y hora, asumiendo la zona horaria de Argentina (-03:00)
-        const startString = `${meta.date}T${meta.time}:00-03:00`;
+        // --- EL FIX: Forzamos la hora literal ignorando zonas horarias ---
+        // Usamos la "Z" para que si la cancha es a las 19:00, se guarde como 19:00:00 exacto
+        const startString = `${meta.date}T${meta.time}:00.000Z`;
         const startDate = new Date(startString);
         
         // Sumamos 1 hora para calcular el end_time de la cancha
@@ -33,15 +33,15 @@ serve(async (req: Request) => {
 
         const newBooking = {
           court_id: meta.court_id,
-          start_time: startDate.toISOString(), // Columna correcta según tu BD
-          end_time: endDate.toISOString(),     // Columna correcta según tu BD
+          start_time: startDate.toISOString(), 
+          end_time: endDate.toISOString(),     
           user_name: meta.user_name,
           user_email: meta.user_email,
           user_phone: meta.user_phone,
           total_price: meta.total_price,
           deposit_amount: meta.deposit_amount,
           payment_status: meta.payment_status,
-          status: "confirmed", // Aseguramos que aparezca como confirmada en tu panel admin
+          status: "confirmed", 
           booking_type: "online"
         };
 
