@@ -134,8 +134,16 @@ export function useBookingsByCourt(courtId?: string, date?: string) {
 export function generateAvailableSlots(bookings: Booking[], date: string, openHour = 8, closeHour = 23) {
   const occupiedHours = new Set(bookings.map((b) => new Date(b.start_time).getUTCHours()));
   const slots: { time: string; available: boolean }[] = [];
+  
   for (let h = openHour; h < closeHour; h++) {
-    slots.push({ time: `${h.toString().padStart(2, "0")}:00`, available: !occupiedHours.has(h) });
+    // MAGIA VISUAL: Si h es 24, displayH es 0. Si h es 25, displayH es 1.
+    const displayH = h % 24; 
+    
+    slots.push({ 
+      time: `${displayH.toString().padStart(2, "0")}:00`, 
+      // MAGIA LÓGICA: Buscamos si la hora real (ej: 0, 1) está ocupada, no el 24 o 25
+      available: !occupiedHours.has(displayH) 
+    });
   }
   return slots;
 }
