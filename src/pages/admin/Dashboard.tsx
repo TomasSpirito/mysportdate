@@ -33,7 +33,11 @@ const AdminDashboard = () => {
   // Build hours from schedule — each entry represents a 1-hour block (e.g. "22:00" = 22:00–23:00)
   const hours: string[] = [];
   const openH = todaySchedule?.is_open ? parseInt(todaySchedule.open_time.split(":")[0]) : (!todaySchedule ? 8 : -1);
-  const closeH = todaySchedule?.is_open ? parseInt(todaySchedule.close_time.split(":")[0]) : (!todaySchedule ? 23 : -1);
+  let closeH = todaySchedule?.is_open ? parseInt(todaySchedule.close_time.split(":")[0]) : (!todaySchedule ? 23 : -1);
+  
+  // EL FIX PARA LA MEDIANOCHE: Si cierra a las 00, lo tratamos como las 24hs
+  if (closeH === 0) closeH = 24;
+
   if (openH >= 0 && closeH > openH) {
     for (let h = openH; h < closeH; h++) {
       hours.push(`${h.toString().padStart(2, "0")}:00`);

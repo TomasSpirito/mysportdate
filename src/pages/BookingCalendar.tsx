@@ -40,7 +40,10 @@ const BookingCalendar = () => {
 
   // Dynamic open/close hours
   const openHour = daySchedule?.is_open ? parseInt(daySchedule.open_time.split(":")[0]) : 8;
-  const closeHour = daySchedule?.is_open ? parseInt(daySchedule.close_time.split(":")[0]) : 23;
+  let closeHour = daySchedule?.is_open ? parseInt(daySchedule.close_time.split(":")[0]) : 23;
+
+  // EL FIX PARA LA MEDIANOCHE LADO CLIENTE:
+  if (closeHour === 0) closeHour = 24;
 
   const slots = useMemo(() => generateAvailableSlots(bookings, dateStr, openHour, closeHour), [bookings, dateStr, openHour, closeHour]);
   const availableSlots = slots.filter((s) => s.available);
