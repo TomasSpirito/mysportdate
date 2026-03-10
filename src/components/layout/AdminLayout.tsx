@@ -15,6 +15,7 @@ const navItems = [
   { to: "/admin/cash", icon: DollarSign, label: "Caja" },
   { to: "/admin/expenses", icon: Receipt, label: "Gastos" },
   { to: "/admin/players", icon: Users, label: "Jugadores" },
+  { to: "/admin/buffet", icon: Coffee, label: "Buffet" },
   { to: "/admin/analytics", icon: BarChart3, label: "Analíticas" },
   { to: "/admin/settings", icon: Settings, label: "Config" },
 ];
