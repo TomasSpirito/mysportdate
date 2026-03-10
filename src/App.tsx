@@ -22,6 +22,7 @@ import AdminAnalytics from "./pages/admin/Analytics";
 import AdminSettings from "./pages/admin/Settings";
 import AdminExpenses from "./pages/admin/Expenses";
 import AdminPlayers from "./pages/admin/Players";
+import AdminBuffet from "./pages/admin/Buffet";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
