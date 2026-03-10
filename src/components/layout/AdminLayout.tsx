@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, CalendarDays, Settings, DollarSign, BarChart3, Trophy, Receipt, Users, LogOut } from "lucide-react";
+import { LayoutDashboard, CalendarDays, Settings, DollarSign, BarChart3, Trophy, Receipt, Users, Coffee, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFacility } from "@/hooks/use-supabase-data";
 import { useAuth } from "@/contexts/AuthContext";
