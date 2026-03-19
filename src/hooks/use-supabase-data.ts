@@ -8,6 +8,9 @@ export interface Addon { id: string; facility_id: string; name: string; price: n
 export interface Booking { id: string; court_id: string; user_id: string | null; user_name: string | null; user_email?: string | null; user_phone?: string | null; start_time: string; end_time: string; total_price: number; deposit_amount: number; status: string; payment_status: string; booking_type: string; created_at: string; }
 export interface Expense { id: string; facility_id: string; category: string; description: string | null; amount: number; expense_date: string; created_at: string; }
 export interface FacilitySchedule { id: string; facility_id: string; day_of_week: number; is_open: boolean; open_time: string; close_time: string; }
+export interface BuffetProduct { id: string; facility_id: string; name: string; category: string; price: number; stock: number; image: string | null; created_at: string; }
+export interface BuffetSale { id: string; facility_id: string; total: number; created_at: string; }
+export interface BuffetSaleItem { id: string; sale_id: string; product_id: string | null; product_name: string; quantity: number; unit_price: number; }
 export interface Facility { id: string; name: string; slug?: string | null; location: string | null; open_time: string; close_time: string; owner_id: string | null; phone: string | null; email: string | null; whatsapp: string | null; }
 
 // ── Queries ──
