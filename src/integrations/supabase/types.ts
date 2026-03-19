@@ -141,6 +141,102 @@ export type Database = {
           },
         ]
       }
+      buffet_products: {
+        Row: {
+          category: string
+          created_at: string
+          facility_id: string
+          id: string
+          image: string | null
+          name: string
+          price: number
+          stock: number
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          facility_id?: string
+          id?: string
+          image?: string | null
+          name: string
+          price?: number
+          stock?: number
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          facility_id?: string
+          id?: string
+          image?: string | null
+          name?: string
+          price?: number
+          stock?: number
+        }
+        Relationships: []
+      }
+      buffet_sale_items: {
+        Row: {
+          id: string
+          product_id: string | null
+          product_name: string
+          quantity: number
+          sale_id: string
+          unit_price: number
+        }
+        Insert: {
+          id?: string
+          product_id?: string | null
+          product_name: string
+          quantity?: number
+          sale_id: string
+          unit_price?: number
+        }
+        Update: {
+          id?: string
+          product_id?: string | null
+          product_name?: string
+          quantity?: number
+          sale_id?: string
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "buffet_sale_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "buffet_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "buffet_sale_items_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "buffet_sales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      buffet_sales: {
+        Row: {
+          created_at: string
+          facility_id: string
+          id: string
+          total: number
+        }
+        Insert: {
+          created_at?: string
+          facility_id?: string
+          id?: string
+          total?: number
+        }
+        Update: {
+          created_at?: string
+          facility_id?: string
+          id?: string
+          total?: number
+        }
+        Relationships: []
+      }
       courts: {
         Row: {
           created_at: string
