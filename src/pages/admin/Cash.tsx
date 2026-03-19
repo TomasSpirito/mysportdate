@@ -1,10 +1,10 @@
 import { useState, useMemo } from "react";
 import AdminLayout from "@/components/layout/AdminLayout";
-import { useBookings, useCourts, useUpdateBooking, useExpenses } from "@/hooks/use-supabase-data";
+import { useBookings, useCourts, useUpdateBooking, useExpenses, useBuffetSales } from "@/hooks/use-supabase-data";
 import { cn } from "@/lib/utils";
 import { format, addDays, addMonths } from "date-fns";
 import { es } from "date-fns/locale";
-import { DollarSign, TrendingUp, CreditCard, AlertCircle, ChevronLeft, ChevronRight, Calendar, TrendingDown } from "lucide-react";
+import { DollarSign, TrendingUp, CreditCard, AlertCircle, ChevronLeft, ChevronRight, Calendar, TrendingDown, Coffee } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 const AdminCash = () => {
@@ -15,6 +15,7 @@ const AdminCash = () => {
   const { data: bookings = [] } = useBookings(dateStr);
   const { data: expenses = [] } = useExpenses(dateStr);
   const { data: courts = [] } = useCourts();
+  const { data: buffetSales = [] } = useBuffetSales(dateStr);
   const updateBooking = useUpdateBooking();
 
   const getCourtName = (id: string) => courts.find((c) => c.id === id)?.name || "";
@@ -24,9 +25,10 @@ const AdminCash = () => {
     const totalDeposits = bookings.reduce((s, b) => s + b.deposit_amount, 0);
     const pendingPayments = totalRevenue - totalDeposits;
     const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
-    const netBalance = totalDeposits - totalExpenses;
-    return { totalBookings: bookings.length, totalRevenue, totalDeposits, pendingPayments, totalExpenses, netBalance };
-  }, [bookings, expenses]);
+    const buffetTotal = buffetSales.reduce((s, sale) => s + sale.total, 0);
+    const netBalance = totalDeposits + buffetTotal - totalExpenses;
+    return { totalBookings: bookings.length, totalRevenue, totalDeposits, pendingPayments, totalExpenses, netBalance, buffetTotal };
+  }, [bookings, expenses, buffetSales]);
 
   const pendingBookings = bookings.filter((b) => b.payment_status === "partial" || b.payment_status === "none");
 
@@ -76,11 +78,12 @@ const AdminCash = () => {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-8">
         {[
-          { label: "Ingresos total", value: stats.totalRevenue, icon: DollarSign, color: "text-primary" },
+          { label: "Ingresos canchas", value: stats.totalRevenue, icon: DollarSign, color: "text-primary" },
           { label: "Cobrado", value: stats.totalDeposits, icon: CreditCard, color: "text-primary" },
           { label: "Pendiente", value: stats.pendingPayments, icon: AlertCircle, color: "text-accent" },
+          { label: "Buffet", value: stats.buffetTotal, icon: Coffee, color: "text-primary" },
           { label: "Egresos", value: stats.totalExpenses, icon: TrendingDown, color: "text-destructive" },
           { label: "Balance neto", value: stats.netBalance, icon: TrendingUp, color: stats.netBalance >= 0 ? "text-primary" : "text-destructive" },
         ].map((card) => (
@@ -116,11 +119,11 @@ const AdminCash = () => {
         </>
       )}
 
-      {/* All movements */}
-      <h2 className="font-bold text-lg mb-3">Ingresos</h2>
+      {/* Booking income */}
+      <h2 className="font-bold text-lg mb-3">Ingresos - Canchas</h2>
       {bookings.length === 0 ? (
         <div className="text-center py-6 bg-muted/50 rounded-2xl mb-6">
-          <p className="text-sm font-semibold text-muted-foreground">Sin ingresos</p>
+          <p className="text-sm font-semibold text-muted-foreground">Sin ingresos de canchas</p>
         </div>
       ) : (
         <div className="space-y-2 mb-6">
@@ -141,6 +144,32 @@ const AdminCash = () => {
                 "bg-destructive/10 text-destructive"
               )}>
                 {b.booking_type === "online" ? "Online" : b.booking_type === "fixed" ? "Fijo" : "Manual"}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Buffet income */}
+      <h2 className="font-bold text-lg mb-3 flex items-center gap-2">
+        <Coffee className="w-4 h-4 text-primary" /> Ingresos - Buffet
+      </h2>
+      {buffetSales.length === 0 ? (
+        <div className="text-center py-6 bg-muted/50 rounded-2xl mb-6">
+          <p className="text-sm font-semibold text-muted-foreground">Sin ventas de buffet</p>
+        </div>
+      ) : (
+        <div className="space-y-2 mb-6">
+          {buffetSales.map((sale) => (
+            <div key={sale.id} className="glass-card rounded-xl p-4 flex items-center gap-3 text-sm">
+              <div className="w-2.5 h-2.5 rounded-full bg-primary" />
+              <div className="flex-1">
+                <p className="font-medium">Venta Buffet</p>
+                <p className="text-xs text-muted-foreground">{format(new Date(sale.created_at), "HH:mm")}</p>
+              </div>
+              <p className="font-bold text-primary">${sale.total.toLocaleString()}</p>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary/10 text-primary">
+                Buffet
               </span>
             </div>
           ))}

@@ -8,6 +8,9 @@ export interface Addon { id: string; facility_id: string; name: string; price: n
 export interface Booking { id: string; court_id: string; user_id: string | null; user_name: string | null; user_email?: string | null; user_phone?: string | null; start_time: string; end_time: string; total_price: number; deposit_amount: number; status: string; payment_status: string; booking_type: string; created_at: string; }
 export interface Expense { id: string; facility_id: string; category: string; description: string | null; amount: number; expense_date: string; created_at: string; }
 export interface FacilitySchedule { id: string; facility_id: string; day_of_week: number; is_open: boolean; open_time: string; close_time: string; }
+export interface BuffetProduct { id: string; facility_id: string; name: string; category: string; price: number; stock: number; image: string | null; created_at: string; }
+export interface BuffetSale { id: string; facility_id: string; total: number; created_at: string; }
+export interface BuffetSaleItem { id: string; sale_id: string; product_id: string | null; product_name: string; quantity: number; unit_price: number; }
 export interface Facility { id: string; name: string; slug?: string | null; location: string | null; open_time: string; close_time: string; owner_id: string | null; phone: string | null; email: string | null; whatsapp: string | null; }
 
 // ── Queries ──
@@ -352,5 +355,118 @@ export function useUpsertFacilitySchedule() {
       if (insError) throw insError;
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["facility-schedules"] }); },
+  });
+}
+
+// ── Buffet ──
+
+export function useBuffetProducts() {
+  const facilityId = useFacilityId();
+  return useQuery({
+    queryKey: ["buffet-products", facilityId],
+    queryFn: async () => {
+      if (!facilityId) return [];
+      const { data, error } = await supabase.from("buffet_products").select("*").eq("facility_id", facilityId).order("name");
+      if (error) throw error;
+      return data as BuffetProduct[];
+    },
+    enabled: !!facilityId,
+  });
+}
+
+export function useCreateBuffetProduct() {
+  const facilityId = useFacilityId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (product: { name: string; category: string; price: number; stock: number }) => {
+      if (!facilityId) throw new Error("No facility");
+      const { error } = await supabase.from("buffet_products").insert({ ...product, facility_id: facilityId } as any);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["buffet-products"] }); },
+  });
+}
+
+export function useUpdateBuffetProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: { id: string; name?: string; category?: string; price?: number; stock?: number }) => {
+      const { error } = await supabase.from("buffet_products").update(updates as any).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["buffet-products"] }); },
+  });
+}
+
+export function useDeleteBuffetProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("buffet_products").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["buffet-products"] }); },
+  });
+}
+
+export function useBuffetSales(date?: string) {
+  const facilityId = useFacilityId();
+  return useQuery({
+    queryKey: ["buffet-sales", facilityId, date],
+    queryFn: async () => {
+      if (!facilityId) return [];
+      let q = supabase.from("buffet_sales").select("*").eq("facility_id", facilityId).order("created_at", { ascending: false });
+      if (date) {
+        q = q.gte("created_at", `${date}T00:00:00`).lt("created_at", `${date}T23:59:59`);
+      }
+      const { data, error } = await q;
+      if (error) throw error;
+      return data as BuffetSale[];
+    },
+    enabled: !!facilityId,
+  });
+}
+
+export function useBuffetSalesRange(startDate?: string, endDate?: string) {
+  const facilityId = useFacilityId();
+  return useQuery({
+    queryKey: ["buffet-sales-range", facilityId, startDate, endDate],
+    queryFn: async () => {
+      if (!startDate || !endDate || !facilityId) return [];
+      const { data, error } = await supabase.from("buffet_sales").select("*")
+        .eq("facility_id", facilityId)
+        .gte("created_at", `${startDate}T00:00:00`).lt("created_at", `${endDate}T23:59:59`);
+      if (error) throw error;
+      return data as BuffetSale[];
+    },
+    enabled: !!startDate && !!endDate && !!facilityId,
+  });
+}
+
+export function useCreateBuffetSale() {
+  const facilityId = useFacilityId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { total: number; items: { product_id: string; product_name: string; quantity: number; unit_price: number }[] }) => {
+      if (!facilityId) throw new Error("No facility");
+      const { data: sale, error: saleError } = await supabase.from("buffet_sales").insert({ facility_id: facilityId, total: params.total } as any).select("id").single();
+      if (saleError) throw saleError;
+      const saleItems = params.items.map((item) => ({ sale_id: sale.id, ...item }));
+      const { error: itemsError } = await supabase.from("buffet_sale_items").insert(saleItems as any);
+      if (itemsError) throw itemsError;
+      // Decrease stock for each product
+      for (const item of params.items) {
+        const { data: product } = await supabase.from("buffet_products").select("stock").eq("id", item.product_id).single();
+        if (product) {
+          await supabase.from("buffet_products").update({ stock: Math.max(0, product.stock - item.quantity) } as any).eq("id", item.product_id);
+        }
+      }
+      return sale.id;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["buffet-products"] });
+      qc.invalidateQueries({ queryKey: ["buffet-sales"] });
+      qc.invalidateQueries({ queryKey: ["buffet-sales-range"] });
+    },
   });
 }

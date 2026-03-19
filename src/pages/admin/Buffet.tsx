@@ -14,41 +14,27 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Minus, ShoppingCart, Trash2, Package } from "lucide-react";
-
-/* ─── Mock data ─── */
-interface Product {
-  id: string;
-  name: string;
-  category: string;
-  price: number;
-  stock: number;
-  image?: string;
-}
-
-const INITIAL_PRODUCTS: Product[] = [
-  { id: "1", name: "Agua 500ml", category: "Bebidas", price: 800, stock: 24 },
-  { id: "2", name: "Gatorade", category: "Bebidas", price: 1500, stock: 12 },
-  { id: "3", name: "Coca-Cola 500ml", category: "Bebidas", price: 1200, stock: 18 },
-  { id: "4", name: "Cerveza Lata", category: "Bebidas", price: 1800, stock: 30 },
-  { id: "5", name: "Barrita de Cereal", category: "Snacks", price: 600, stock: 15 },
-  { id: "6", name: "Sándwich de Miga", category: "Comidas", price: 1000, stock: 8 },
-  { id: "7", name: "Medialunas x3", category: "Comidas", price: 1200, stock: 10 },
-  { id: "8", name: "Café con Leche", category: "Bebidas", price: 900, stock: 99 },
-  { id: "9", name: "Tostado J&Q", category: "Comidas", price: 2500, stock: 6 },
-  { id: "10", name: "Papas Fritas", category: "Snacks", price: 1100, stock: 20 },
-];
+import { Plus, Minus, ShoppingCart, Trash2, Package, Loader2 } from "lucide-react";
+import {
+  useBuffetProducts, useCreateBuffetProduct, useUpdateBuffetProduct, useDeleteBuffetProduct, useCreateBuffetSale,
+  type BuffetProduct,
+} from "@/hooks/use-supabase-data";
+import { toast } from "@/hooks/use-toast";
 
 const CATEGORIES = ["Todas", "Bebidas", "Snacks", "Comidas"];
 
 interface CartItem {
-  product: Product;
+  product: BuffetProduct;
   qty: number;
 }
 
-/* ─── Component ─── */
 const Buffet = () => {
-  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
+  const { data: products = [], isLoading } = useBuffetProducts();
+  const createProduct = useCreateBuffetProduct();
+  const updateProduct = useUpdateBuffetProduct();
+  const deleteProduct = useDeleteBuffetProduct();
+  const createSale = useCreateBuffetSale();
+
   const [cart, setCart] = useState<CartItem[]>([]);
   const [categoryFilter, setCategoryFilter] = useState("Todas");
 
@@ -59,7 +45,7 @@ const Buffet = () => {
   const [newStock, setNewStock] = useState("");
 
   /* ── Cart helpers ── */
-  const addToCart = (product: Product) => {
+  const addToCart = (product: BuffetProduct) => {
     setCart((prev) => {
       const existing = prev.find((i) => i.product.id === product.id);
       if (existing) {
@@ -82,34 +68,54 @@ const Buffet = () => {
 
   const cartTotal = cart.reduce((sum, i) => sum + i.product.price * i.qty, 0);
 
-  const handleCharge = () => {
-    // Decrease stock locally
-    setProducts((prev) =>
-      prev.map((p) => {
-        const inCart = cart.find((i) => i.product.id === p.id);
-        return inCart ? { ...p, stock: p.stock - inCart.qty } : p;
-      })
-    );
-    setCart([]);
+  const handleCharge = async () => {
+    try {
+      await createSale.mutateAsync({
+        total: cartTotal,
+        items: cart.map((i) => ({
+          product_id: i.product.id,
+          product_name: i.product.name,
+          quantity: i.qty,
+          unit_price: i.product.price,
+        })),
+      });
+      setCart([]);
+      toast({ title: "Venta registrada ✅" });
+    } catch {
+      toast({ title: "Error al registrar la venta", variant: "destructive" });
+    }
   };
 
-  const handleAddProduct = () => {
+  const handleAddProduct = async () => {
     if (!newName || !newPrice) return;
-    const p: Product = {
-      id: crypto.randomUUID(),
-      name: newName,
-      category: newCategory,
-      price: Number(newPrice),
-      stock: Number(newStock) || 0,
-    };
-    setProducts((prev) => [...prev, p]);
-    setNewName("");
-    setNewPrice("");
-    setNewStock("");
+    try {
+      await createProduct.mutateAsync({
+        name: newName,
+        category: newCategory,
+        price: Number(newPrice),
+        stock: Number(newStock) || 0,
+      });
+      setNewName("");
+      setNewPrice("");
+      setNewStock("");
+      toast({ title: "Producto agregado ✅" });
+    } catch {
+      toast({ title: "Error al agregar producto", variant: "destructive" });
+    }
   };
 
   const filteredProducts =
     categoryFilter === "Todas" ? products : products.filter((p) => p.category === categoryFilter);
+
+  if (isLoading) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </div>
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout>
@@ -130,7 +136,6 @@ const Buffet = () => {
             <div className="flex flex-col lg:flex-row gap-6">
               {/* Product grid */}
               <div className="flex-1 space-y-4">
-                {/* Category filter */}
                 <div className="flex gap-2 flex-wrap">
                   {CATEGORIES.map((cat) => (
                     <Button
@@ -144,28 +149,35 @@ const Buffet = () => {
                   ))}
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
-                  {filteredProducts.map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => p.stock > 0 && addToCart(p)}
-                      disabled={p.stock <= 0}
-                      className="group rounded-xl border bg-card text-card-foreground p-4 text-left transition-all hover:shadow-md hover:border-primary/40 disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      <div className="w-full aspect-square rounded-lg bg-muted flex items-center justify-center mb-3">
-                        <Package className="w-8 h-8 text-muted-foreground/40" />
-                      </div>
-                      <p className="font-semibold text-sm truncate">{p.name}</p>
-                      <p className="text-xs text-muted-foreground">{p.category}</p>
-                      <div className="flex items-center justify-between mt-2">
-                        <span className="font-bold text-primary">${p.price.toLocaleString()}</span>
-                        <Badge variant={p.stock > 0 ? "secondary" : "destructive"} className="text-[10px]">
-                          Stock: {p.stock}
-                        </Badge>
-                      </div>
-                    </button>
-                  ))}
-                </div>
+                {filteredProducts.length === 0 ? (
+                  <div className="text-center py-12 bg-muted/50 rounded-2xl">
+                    <Package className="w-8 h-8 mx-auto text-muted-foreground/40 mb-2" />
+                    <p className="text-sm text-muted-foreground">No hay productos. Agregá desde la pestaña Inventario.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+                    {filteredProducts.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => p.stock > 0 && addToCart(p)}
+                        disabled={p.stock <= 0}
+                        className="group rounded-xl border bg-card text-card-foreground p-4 text-left transition-all hover:shadow-md hover:border-primary/40 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <div className="w-full aspect-square rounded-lg bg-muted flex items-center justify-center mb-3">
+                          <Package className="w-8 h-8 text-muted-foreground/40" />
+                        </div>
+                        <p className="font-semibold text-sm truncate">{p.name}</p>
+                        <p className="text-xs text-muted-foreground">{p.category}</p>
+                        <div className="flex items-center justify-between mt-2">
+                          <span className="font-bold text-primary">${p.price.toLocaleString()}</span>
+                          <Badge variant={p.stock > 0 ? "secondary" : "destructive"} className="text-[10px]">
+                            Stock: {p.stock}
+                          </Badge>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Cart */}
@@ -221,7 +233,8 @@ const Buffet = () => {
                       <span>Total</span>
                       <span className="text-primary">${cartTotal.toLocaleString()}</span>
                     </div>
-                    <Button className="w-full h-12 text-base font-bold" disabled={cart.length === 0} onClick={handleCharge}>
+                    <Button className="w-full h-12 text-base font-bold" disabled={cart.length === 0 || createSale.isPending} onClick={handleCharge}>
+                      {createSale.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                       Cobrar ${cartTotal.toLocaleString()}
                     </Button>
                   </div>
@@ -278,7 +291,7 @@ const Buffet = () => {
                         <Button variant="outline">Cancelar</Button>
                       </DialogClose>
                       <DialogClose asChild>
-                        <Button onClick={handleAddProduct}>Guardar</Button>
+                        <Button onClick={handleAddProduct} disabled={createProduct.isPending}>Guardar</Button>
                       </DialogClose>
                     </DialogFooter>
                   </DialogContent>
@@ -292,6 +305,7 @@ const Buffet = () => {
                     <TableHead>Categoría</TableHead>
                     <TableHead className="text-right">Precio</TableHead>
                     <TableHead className="text-right">Stock</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -306,6 +320,11 @@ const Buffet = () => {
                         <Badge variant={p.stock > 5 ? "secondary" : p.stock > 0 ? "outline" : "destructive"}>
                           {p.stock}
                         </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => deleteProduct.mutate(p.id)}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
