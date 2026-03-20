@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useSports, useCourts, useFacility, useFacilitySchedules } from "@/hooks/use-supabase-data";
 import { useTenantPath } from "@/hooks/use-tenant";
 import PlayerLayout from "@/components/layout/PlayerLayout";
-import { MapPin, Phone, Mail, MessageCircle, Instagram, Map, Clock, ChevronRight, Trophy, Info, Star, Wifi, ParkingCircle, Shirt, ShowerHead, Coffee, UtensilsCrossed, PartyPopper, ShieldCheck, Lamp } from "lucide-react";
+import { Loader2, MapPin, Phone, Mail, MessageCircle, Instagram, Map, Clock, ChevronRight, Trophy, Info, Star, Wifi, ParkingCircle, Shirt, ShowerHead, Coffee, UtensilsCrossed, PartyPopper, ShieldCheck, Lamp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];

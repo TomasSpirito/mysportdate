@@ -419,7 +419,7 @@ const AdminCourts = () => {
                     <span className="text-xl">{addon.icon}</span>
                     <span className="font-medium flex-1">{addon.name}</span>
                     <span className="text-xs text-muted-foreground">${addon.price.toLocaleString()}</span>
-                    {alreadyFormatted && <Check className="w-4 h-4 text-primary" />}
+                    {alreadyAdded && <Check className="w-4 h-4 text-primary" />}
                   </button>
                 );
               })}
