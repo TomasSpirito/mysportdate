@@ -1,14 +1,16 @@
-import { useState } from "react";
+import { useState, useRef } from "react"; // <--- Agregamos useRef
 import AdminLayout from "@/components/layout/AdminLayout";
 import {
   useCourts, useSports, useAddons,
   useCreateCourt, useUpdateCourt, useDeleteCourt,
   useCreateSport, useUpdateSport, useDeleteSport,
   useCreateAddon, useUpdateAddon, useDeleteAddon,
+  useUploadCourtImage, // <--- Importamos el hook
   type Court, type Sport, type Addon,
 } from "@/hooks/use-supabase-data";
 import { cn } from "@/lib/utils";
-import { Plus, Edit2, Trash2, Trophy, Settings, X, Search, Check } from "lucide-react";
+// <--- Agregamos Upload, Loader2, ImageIcon
+import { Plus, Edit2, Trash2, Trophy, Settings, X, Search, Check, Upload, Loader2, ImageIcon } from "lucide-react"; 
 import { toast } from "@/hooks/use-toast";
 
 type ModalType = "court" | "sport" | "addon" | null;
@@ -49,10 +51,16 @@ const AdminCourts = () => {
   const createCourt = useCreateCourt(); const updateCourt = useUpdateCourt(); const deleteCourt = useDeleteCourt();
   const createSport = useCreateSport(); const updateSport = useUpdateSport(); const deleteSport = useDeleteSport();
   const createAddon = useCreateAddon(); const updateAddon = useUpdateAddon(); const deleteAddon = useDeleteAddon();
+  
+  // Hook de subida de imagen de cancha
+  const { uploadImage, uploadingImage } = useUploadCourtImage();
 
   const [modal, setModal] = useState<ModalType>(null);
   const [editing, setEditing] = useState<Court | Sport | Addon | null>(null);
   const [form, setForm] = useState<any>({});
+
+  // Ref para el input de archivo
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Predefined picker states
   const [showSportPicker, setShowSportPicker] = useState(false);
@@ -61,15 +69,58 @@ const AdminCourts = () => {
 
   const SURFACE_OPTIONS = ["Césped sintético", "Césped natural", "Cemento", "Parquet", "Madera", "Arena", "Caucho", "Baldosa", "Arcilla", "Tartán", "Otro"];
 
-  const openCreate = (type: ModalType) => { setEditing(null); setForm(type === "court" ? { name: "", sport_id: sports[0]?.id || "", surface: SURFACE_OPTIONS[0], price_per_hour: 0, features: "" } : type === "sport" ? { name: "", icon: "⚽" } : { name: "", price: 0, icon: "📦" }); setModal(type); };
-  const openEdit = (type: ModalType, item: any) => { setEditing(item); setForm(type === "court" ? { name: item.name, sport_id: item.sport_id, surface: item.surface || "", price_per_hour: item.price_per_hour, features: (item.features || []).join(", ") } : type === "sport" ? { name: item.name, icon: item.icon } : { name: item.name, price: item.price, icon: item.icon }); setModal(type); };
+  const openCreate = (type: ModalType) => { 
+      setEditing(null); 
+      setForm(type === "court" ? { name: "", sport_id: sports[0]?.id || "", surface: SURFACE_OPTIONS[0], price_per_hour: 0, features: "", image_url: "" } : type === "sport" ? { name: "", icon: "⚽" } : { name: "", price: 0, icon: "📦" }); 
+      setModal(type); 
+  };
+  
+  const openEdit = (type: ModalType, item: any) => { 
+      setEditing(item); 
+      setForm(type === "court" ? { name: item.name, sport_id: item.sport_id, surface: item.surface || "", price_per_hour: item.price_per_hour, features: (item.features || []).join(", "), image_url: item.image_url || "" } : type === "sport" ? { name: item.name, icon: item.icon } : { name: item.name, price: item.price, icon: item.icon }); 
+      setModal(type); 
+  };
+
+  /* ── LÓGICA DE SUBIDA DE IMAGEN ── */
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+        toast({ title: "Error", description: "El archivo debe ser una imagen", variant: "destructive" });
+        return;
+    }
+    if (file.size > 2 * 1024 * 1024) { 
+        toast({ title: "Error", description: "La imagen es muy pesada (max 2MB)", variant: "destructive" });
+        return;
+    }
+
+    try {
+        const publicUrl = await uploadImage(file);
+        setForm((prev: any) => ({ ...prev, image_url: publicUrl }));
+        toast({ title: "Foto de cancha subida ✅" });
+    } catch {
+        toast({ title: "Error", description: "No se pudo subir la foto", variant: "destructive" });
+    } finally {
+        event.target.value = '';
+    }
+  };
+
 
   const handleSave = async () => {
     try {
       if (modal === "court") {
-        const courtData = { name: form.name, sport_id: form.sport_id, surface: form.surface, price_per_hour: Number(form.price_per_hour), features: form.features ? form.features.split(",").map((f: string) => f.trim()).filter(Boolean) : [] };
-        if (editing) await updateCourt.mutateAsync({ id: (editing as Court).id, ...courtData });
-        else await createCourt.mutateAsync(courtData);
+        const courtData = { 
+            name: form.name, 
+            sport_id: form.sport_id, 
+            surface: form.surface, 
+            price_per_hour: Number(form.price_per_hour), 
+            features: form.features ? form.features.split(",").map((f: string) => f.trim()).filter(Boolean) : [],
+            image_url: form.image_url // Enviamos la URL de la imagen al hook
+        };
+        // Omitimos la validación estricta de TypeScript en la llamada al hook por si no actualizaste la interfaz aún
+        if (editing) await updateCourt.mutateAsync({ id: (editing as Court).id, ...courtData } as any);
+        else await createCourt.mutateAsync(courtData as any);
       } else if (modal === "sport") {
         if (editing) await updateSport.mutateAsync({ id: (editing as Sport).id, name: form.name, icon: form.icon });
         else await createSport.mutateAsync({ name: form.name, icon: form.icon });
@@ -149,7 +200,13 @@ const AdminCourts = () => {
               const sport = sports.find((s) => s.id === court.sport_id);
               return (
                 <div key={court.id} className="glass-card rounded-2xl p-5 flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center text-2xl">{sport?.icon}</div>
+                  <div className="w-16 h-16 rounded-xl bg-muted flex items-center justify-center overflow-hidden shrink-0 border border-border">
+                    {court.image_url ? (
+                        <img src={court.image_url} alt={court.name} className="w-full h-full object-cover" loading="lazy" />
+                    ) : (
+                        <span className="text-3xl">{sport?.icon || <Trophy className="w-6 h-6 text-muted-foreground/40"/>}</span>
+                    )}
+                  </div>
                   <div className="flex-1">
                     <h3 className="font-bold">{court.name}</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">{sport?.name} • {court.surface}</p>
@@ -217,16 +274,45 @@ const AdminCourts = () => {
       {/* Edit modal (court/sport/addon) */}
       {modal && (
         <div className="fixed inset-0 z-50 bg-foreground/30 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setModal(null)}>
-          <div onClick={(e) => e.stopPropagation()} className="bg-card rounded-2xl p-6 max-w-md w-full shadow-2xl">
+          <div onClick={(e) => e.stopPropagation()} className="bg-card rounded-2xl p-6 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto scrollbar-thin">
             <div className="flex items-center justify-between mb-5">
               <h3 className="font-extrabold text-lg">{editing ? "Editar" : "Nueva"} {modal === "court" ? "cancha" : modal === "sport" ? "deporte" : "extra"}</h3>
               <button onClick={() => setModal(null)} className="p-1 rounded-md hover:bg-muted"><X className="w-4 h-4" /></button>
             </div>
-            <div className="space-y-3">
+            
+            <div className="space-y-4 px-1 pb-2">
+              {modal === "court" && (
+                  <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground block">Foto de la cancha</label>
+                      <button 
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={uploadingImage}
+                          className={cn(
+                              "w-full h-32 rounded-xl border-2 border-dashed border-border flex flex-col items-center justify-center bg-muted/20 text-muted-foreground hover:bg-muted/40 hover:border-primary transition-all overflow-hidden group",
+                              form.image_url && "border-solid border-primary p-0"
+                          )}
+                      >
+                          {uploadingImage ? (
+                              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                          ) : form.image_url ? (
+                              <img src={form.image_url} alt="Cancha" className="w-full h-full object-cover" />
+                          ) : (
+                              <>
+                                  <ImageIcon className="w-6 h-6 mb-2 group-hover:text-primary transition-colors" />
+                                  <span className="text-xs font-medium">Subir foto (Recomendado)</span>
+                              </>
+                          )}
+                      </button>
+                      {/* Input oculto */}
+                      <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+                  </div>
+              )}
+
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Nombre</label>
                 <input className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-transparent outline-none focus:border-primary" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
               </div>
+              
               {modal === "court" && (
                 <>
                   <div>
@@ -270,7 +356,7 @@ const AdminCourts = () => {
                 </>
               )}
             </div>
-            <button onClick={handleSave} className="w-full mt-5 bg-primary text-primary-foreground py-3 rounded-xl font-bold text-sm hover:opacity-90 transition-opacity">
+            <button onClick={handleSave} disabled={uploadingImage} className="w-full mt-5 bg-primary text-primary-foreground py-3 rounded-xl font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-50">
               {editing ? "Guardar cambios" : "Crear"}
             </button>
           </div>
@@ -333,7 +419,7 @@ const AdminCourts = () => {
                     <span className="text-xl">{addon.icon}</span>
                     <span className="font-medium flex-1">{addon.name}</span>
                     <span className="text-xs text-muted-foreground">${addon.price.toLocaleString()}</span>
-                    {alreadyAdded && <Check className="w-4 h-4 text-primary" />}
+                    {alreadyFormatted && <Check className="w-4 h-4 text-primary" />}
                   </button>
                 );
               })}

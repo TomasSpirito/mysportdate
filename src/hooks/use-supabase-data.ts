@@ -1,17 +1,18 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useFacilityId } from "@/contexts/FacilityContext";
+import { useState } from "react";
 
 export interface Sport { id: string; name: string; icon: string; }
-export interface Court { id: string; facility_id: string; sport_id: string; name: string; surface: string | null; price_per_hour: number; features: string[]; image: string | null; }
+export interface Court { id: string; facility_id: string; sport_id: string; name: string; surface: string | null; price_per_hour: number; features: string[]; image: string | null; image_url?: string; }
 export interface Addon { id: string; facility_id: string; name: string; price: number; icon: string; requires_stock: boolean; }
 export interface Booking { id: string; court_id: string; user_id: string | null; user_name: string | null; user_email?: string | null; user_phone?: string | null; start_time: string; end_time: string; total_price: number; deposit_amount: number; status: string; payment_status: string; booking_type: string; created_at: string; }
 export interface Expense { id: string; facility_id: string; category: string; description: string | null; amount: number; expense_date: string; created_at: string; }
 export interface FacilitySchedule { id: string; facility_id: string; day_of_week: number; is_open: boolean; open_time: string; close_time: string; }
-export interface BuffetProduct { id: string; facility_id: string; name: string; category: string; price: number; stock: number; image: string | null; created_at: string; }
+export interface BuffetProduct { id: string; facility_id: string; name: string; category: string; price: number; stock: number; image: string | null; image_url?: string; created_at: string; }
 export interface BuffetSale { id: string; facility_id: string; total: number; created_at: string; }
 export interface BuffetSaleItem { id: string; sale_id: string; product_id: string | null; product_name: string; quantity: number; unit_price: number; }
-export interface Facility { id: string; name: string; slug?: string | null; location: string | null; open_time: string; close_time: string; owner_id: string | null; phone: string | null; email: string | null; whatsapp: string | null; }
+export interface Facility { id: string; name: string; slug?: string | null; location: string | null; open_time: string; close_time: string; owner_id: string | null; phone: string | null; email: string | null; whatsapp: string | null;description?: string | null; maps_url?: string | null; instagram_url?: string | null; logo_url?: string | null; cover_url?: string | null; amenities?: string[]; }
 
 // ── Queries ──
 
@@ -243,6 +244,69 @@ export function useDeleteCourt() {
   return useMutation({ mutationFn: async (id: string) => { const { error } = await supabase.from("courts").delete().eq("id", id); if (error) throw error; }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["courts"] }); } });
 }
 
+// --- Courts uploads ---
+export function useUploadCourtImage() {
+  const facilityId = useFacilityId();
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  const uploadImage = async (file: File) => {
+    if (!facilityId) throw new Error("No facility");
+    setUploadingImage(true);
+    
+    try {
+      const fileName = `${facilityId}/${Date.now()}_${file.name}`;
+
+      const { data, error } = await supabase.storage
+        .from('courts') // Apuntamos al nuevo bucket
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: true,
+        });
+
+      if (error) throw error;
+
+      const { data: publicUrlData } = supabase.storage
+        .from('courts')
+        .getPublicUrl(fileName);
+
+      return publicUrlData.publicUrl;
+    } catch (error) {
+      console.error("Error subiendo imagen de cancha:", error);
+      throw error;
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  return { uploadImage, uploadingImage };
+}
+
+// --- Facility uploads ---
+export function useUploadFacilityImage() {
+  const facilityId = useFacilityId();
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  const uploadImage = async (file: File, type: 'logo' | 'cover') => {
+    if (!facilityId) throw new Error("No facility");
+    setUploadingImage(true);
+    
+    try {
+      const fileName = `${facilityId}/${type}_${Date.now()}_${file.name}`;
+      const { error } = await supabase.storage.from('facilities').upload(fileName, file, { cacheControl: '3600', upsert: true });
+      if (error) throw error;
+      const { data: publicUrlData } = supabase.storage.from('facilities').getPublicUrl(fileName);
+      return publicUrlData.publicUrl;
+    } catch (error) {
+      console.error("Error subiendo imagen del predio:", error);
+      throw error;
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  return { uploadImage, uploadingImage };
+}
+
 // Sports CRUD
 export function useCreateSport() {
   const qc = useQueryClient();
@@ -378,8 +442,10 @@ export function useCreateBuffetProduct() {
   const facilityId = useFacilityId();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (product: { name: string; category: string; price: number; stock: number }) => {
+    // ACTUALIZACIÓN DE PARÁMETROS: Agregamos image_url como opcional
+    mutationFn: async (product: { name: string; category: string; price: number; stock: number; image_url?: string }) => {
       if (!facilityId) throw new Error("No facility");
+      // Ahora inserta el objeto 'product' completo que incluye image_url
       const { error } = await supabase.from("buffet_products").insert({ ...product, facility_id: facilityId } as any);
       if (error) throw error;
     },
@@ -469,4 +535,46 @@ export function useCreateBuffetSale() {
       qc.invalidateQueries({ queryKey: ["buffet-sales-range"] });
     },
   });
+}
+
+// --- Buffet uploads ---
+
+export function useUploadBuffetImage() {
+  const facilityId = useFacilityId();
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  // mutationFn simplificada para manejar la subida
+  const uploadImage = async (file: File) => {
+    if (!facilityId) throw new Error("No facility");
+    setUploadingImage(true);
+    
+    try {
+      // Creamos un nombre de archivo único: facility_id / timestamp_nombreoriginal
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${facilityId}/${Date.now()}_${file.name}`;
+
+      const { data, error } = await supabase.storage
+        .from('buffet') // El bucket que creamos en SQL
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: true, // Si ya existe, lo pisa (el timestamp evita esto)
+        });
+
+      if (error) throw error;
+
+      // Obtenemos la URL pública final
+      const { data: publicUrlData } = supabase.storage
+        .from('buffet')
+        .getPublicUrl(fileName);
+
+      return publicUrlData.publicUrl;
+    } catch (error) {
+      console.error("Error subiendo imagen:", error);
+      throw error;
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  return { uploadImage, uploadingImage };
 }

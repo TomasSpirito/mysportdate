@@ -24,24 +24,37 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
   const location = useLocation();
   const { data: facility } = useFacility();
   const { signOut } = useAuth();
+  
   const facilityName = facility?.name || "Mi Predio";
   const initials = facilityName.charAt(0).toUpperCase();
 
   return (
     <div className="min-h-screen bg-background flex">
-      {/* Sidebar */}
+      {/* Sidebar (Desktop) */}
       <aside className="hidden lg:flex flex-col w-64 bg-secondary text-secondary-foreground border-r border-sidebar-border shrink-0">
         <div className="p-5 border-b border-sidebar-border">
           <Link to="/admin" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-extrabold text-lg shrink-0">
-              {initials}
-            </div>
+            
+            {/* FIX: Lógica condicional para el contenedor del logo en Desktop */}
+            {facility?.logo_url ? (
+                // Si hay logo, contenedor limpio sin fondo ni borde
+                <div className="w-10 h-10 shrink-0 overflow-hidden rounded-xl flex items-center justify-center">
+                    <img src={facility.logo_url} alt="Logo" className="w-full h-full object-contain" />
+                </div>
+            ) : (
+                // Si no hay logo, mostramos el cuadrado verde con la inicial
+                <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-extrabold text-lg shrink-0 border border-primary/20 shadow-inner">
+                    {initials}
+                </div>
+            )}
+
             <div className="min-w-0">
               <span className="font-bold text-lg tracking-tight block truncate">{facilityName}</span>
               <span className="text-xs text-sidebar-foreground opacity-60">Panel Admin</span>
             </div>
           </Link>
         </div>
+        
         <nav className="flex-1 p-3 space-y-1">
           {navItems.map((item) => {
             const isActive = location.pathname === item.to;
@@ -54,6 +67,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
             );
           })}
         </nav>
+        
         <div className="p-3 border-t border-sidebar-border space-y-1">
           {facility?.slug && (
             <Link to={`/predio/${facility.slug}`} className="flex items-center gap-2 px-3 py-2 text-xs text-sidebar-foreground opacity-60 hover:opacity-100 transition-opacity">
@@ -85,9 +99,23 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
 
       {/* Main content */}
       <main className="flex-1 lg:pb-0 pb-16 min-w-0">
+        {/* Mobile Header */}
         <header className="lg:hidden sticky top-0 z-40 bg-secondary text-secondary-foreground border-b border-sidebar-border">
           <div className="flex items-center h-14 px-4 gap-3">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-extrabold text-sm shrink-0">{initials}</div>
+            
+            {/* FIX: Lógica condicional para el contenedor del logo en Mobile Header */}
+            {facility?.logo_url ? (
+                // Si hay logo, contenedor limpio
+                <div className="w-8 h-8 shrink-0 overflow-hidden rounded-lg flex items-center justify-center">
+                    <img src={facility.logo_url} alt="Logo" className="w-full h-full object-contain" />
+                </div>
+            ) : (
+                // Si no hay logo, cuadrado verde con inicial
+                <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-extrabold text-sm shrink-0 border border-primary/20 shadow-inner">
+                    {initials}
+                </div>
+            )}
+
             <span className="font-bold text-lg tracking-tight truncate">{facilityName}</span>
             <button onClick={() => signOut()} className="ml-auto p-2 text-sidebar-foreground opacity-60 hover:opacity-100 shrink-0">
               <LogOut className="w-4 h-4" />

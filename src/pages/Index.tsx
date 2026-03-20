@@ -1,134 +1,236 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { useSports, useCourts, useFacility } from "@/hooks/use-supabase-data";
+import { useSports, useCourts, useFacility, useFacilitySchedules } from "@/hooks/use-supabase-data";
 import { useTenantPath } from "@/hooks/use-tenant";
 import PlayerLayout from "@/components/layout/PlayerLayout";
-import { MapPin, Phone, Mail, MessageCircle } from "lucide-react";
+import { MapPin, Phone, Mail, MessageCircle, Instagram, Map, Clock, ChevronRight, Trophy, Info, Star, Wifi, ParkingCircle, Shirt, ShowerHead, Coffee, UtensilsCrossed, PartyPopper, ShieldCheck, Lamp } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+
+// NUEVO: Ayudante para asignar íconos según el servicio
+const getAmenityIcon = (amenity: string) => {
+    const lower = amenity.toLowerCase();
+    if (lower.includes("wifi")) return Wifi;
+    if (lower.includes("estacionamiento")) return ParkingCircle;
+    if (lower.includes("vestuarios")) return Shirt;
+    if (lower.includes("duchas")) return ShowerHead;
+    if (lower.includes("buffet") || lower.includes("bar")) return Coffee;
+    if (lower.includes("parrilla")) return UtensilsCrossed;
+    if (lower.includes("cumpleaños") || lower.includes("eventos")) return PartyPopper;
+    if (lower.includes("seguridad")) return ShieldCheck;
+    if (lower.includes("led") || lower.includes("iluminación")) return Lamp;
+    return Star; // Ícono por defecto para personalizados
+};
 
 const Index = () => {
   const navigate = useNavigate();
   const tp = useTenantPath();
-  const { data: sports = [], isLoading } = useSports();
+  const { data: sports = [], isLoading: loadingSports } = useSports();
   const { data: courts = [] } = useCourts();
-  const { data: facility } = useFacility();
+  const { data: facility, isLoading: loadingFacility } = useFacility();
+  const { data: schedules = [] } = useFacilitySchedules();
 
   const facilityName = facility?.name || "Mi Predio";
   const whatsappUrl = facility?.whatsapp ? `https://wa.me/${facility.whatsapp}` : null;
+  const initials = facilityName.charAt(0).toUpperCase();
 
-  // Only show sports that have courts in this facility
   const availableSports = sports.filter(s => courts.some(c => c.sport_id === s.id));
+
+  if (loadingFacility) {
+      return (
+          <PlayerLayout>
+              <div className="container px-4 py-10 flex justify-center"><Loader2 className="w-8 h-8 rounded-full border-4 border-primary border-t-transparent animate-spin"/></div>
+          </PlayerLayout>
+      );
+  }
 
   return (
     <PlayerLayout>
-      {/* Hero */}
-      <section className="bg-secondary text-secondary-foreground pb-10 pt-6">
-        <div className="container px-4">
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight mb-1">
-              {facilityName}
-            </h1>
-            <p className="text-base sm:text-lg font-medium text-gradient-brand mb-2">Reservá tu cancha al instante</p>
-            <p className="text-sm text-sidebar-foreground opacity-70 mb-6 max-w-sm">
-              Elegí tu deporte, encontrá horarios libres y reservá en segundos.
-            </p>
-          </motion.div>
-          {facility?.location && (
-            <div className="flex items-center gap-2 text-xs text-sidebar-foreground opacity-50 mb-1">
-              <MapPin className="w-3 h-3 shrink-0" />
-              <span className="truncate">{facility.location}</span>
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* Sport selection */}
-      <section className="container px-4 -mt-5">
-        {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="glass-card rounded-2xl p-6 animate-pulse h-32" />
-            ))}
-          </div>
-        ) : availableSports.length === 0 ? (
-          <div className="text-center py-10 bg-muted/50 rounded-2xl">
-            <p className="text-2xl mb-2">🏟️</p>
-            <p className="text-sm font-semibold text-muted-foreground">Este predio aún no tiene canchas configuradas</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {availableSports.map((sport, i) => (
-              <motion.button
-                key={sport.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1, duration: 0.4 }}
-                onClick={() => navigate(tp(`/courts/${sport.id}`))}
-                className="glass-card rounded-2xl p-6 text-left hover:shadow-xl hover:scale-[1.02] transition-all group"
-              >
-                <span className="text-4xl block mb-3">{sport.icon}</span>
-                <h3 className="font-bold text-lg text-foreground">{sport.name}</h3>
-                <p className="text-sm text-muted-foreground mt-1">Ver canchas disponibles →</p>
-              </motion.button>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Features */}
-      <section className="container px-4 mt-10 mb-10">
-        <div className="flex flex-col sm:flex-row gap-4">
-          {[
-            { icon: "⚡", title: "Reserva instantánea", desc: "Elegí y reservá en menos de 1 minuto" },
-            { icon: "💰", title: "Señá parcial", desc: "Pagá solo una parte para asegurar tu turno" },
-            { icon: "📲", title: "Compartí por WhatsApp", desc: "Avisá a tu grupo con un solo toque" },
-          ].map((f, i) => (
-            <motion.div key={i} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + i * 0.1 }}
-              className="flex items-start gap-3 p-4 rounded-xl bg-muted/50">
-              <span className="text-2xl shrink-0">{f.icon}</span>
-              <div className="min-w-0">
-                <h4 className="font-semibold text-sm">{f.title}</h4>
-                <p className="text-xs text-muted-foreground">{f.desc}</p>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      </section>
-
-      {/* Contact section */}
-      {facility && (facility.phone || facility.email || facility.whatsapp || facility.location) && (
-        <section className="container px-4 mb-10">
-          <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}
-            className="glass-card rounded-2xl p-6">
-            <h2 className="font-bold text-lg mb-4">📍 Contacto</h2>
-            <div className="space-y-3">
-              {facility.location && (
-                <div className="flex items-center gap-3 text-sm">
-                  <MapPin className="w-4 h-4 text-primary shrink-0" />
-                  <span className="break-words min-w-0">{facility.location}</span>
+      {/* Portada (Hero) */}
+      <section className="w-full relative bg-background">
+        <div className="w-full h-48 sm:h-72 md:h-80 bg-muted relative overflow-hidden">
+            {facility?.cover_url ? (
+                <img src={facility.cover_url} alt="Portada del predio" className="w-full h-full object-cover" />
+            ) : (
+                <div className="w-full h-full bg-gradient-to-br from-primary/10 to-muted flex items-center justify-center">
+                    <Trophy className="w-20 h-20 text-muted-foreground/20" />
                 </div>
-              )}
-              {facility.phone && (
-                <div className="flex items-center gap-3 text-sm">
-                  <Phone className="w-4 h-4 text-primary shrink-0" />
-                  <a href={`tel:${facility.phone}`} className="hover:underline break-all">{facility.phone}</a>
-                </div>
-              )}
-              {facility.email && (
-                <div className="flex items-center gap-3 text-sm">
-                  <Mail className="w-4 h-4 text-primary shrink-0" />
-                  <a href={`mailto:${facility.email}`} className="hover:underline break-all">{facility.email}</a>
-                </div>
-              )}
-            </div>
-            {whatsappUrl && (
-              <a href={whatsappUrl} target="_blank" rel="noopener noreferrer"
-                className="mt-4 inline-flex items-center gap-2 bg-[hsl(142,70%,45%)] text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-opacity">
-                <MessageCircle className="w-4 h-4" /> Escribinos por WhatsApp
-              </a>
             )}
-          </motion.div>
-        </section>
-      )}
+            <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
+        </div>
+
+        {/* Logo y Título superpuestos */}
+        <div className="container max-w-5xl mx-auto px-4 relative -mt-16 sm:-mt-20 z-10 mb-8 overflow-visible">
+            <div className="flex flex-col sm:flex-row items-center sm:items-end gap-4 sm:gap-6 text-center sm:text-left">
+                {/* Contenedor del Logo (Estilo profile pic de Insta/FB) */}
+                <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-3xl bg-card border-4 border-background overflow-hidden shadow-2xl shrink-0 flex items-center justify-center bg-white p-1">
+                    {facility?.logo_url ? (
+                        <img src={facility.logo_url} alt="Logo" className="w-full h-full object-contain p-2" />
+                    ) : (
+                        <span className="text-5xl font-black text-primary">{initials}</span>
+                    )}
+                </div>
+                <div className="flex-1 pb-2">
+                    <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-foreground tracking-tight">{facilityName}</h1>
+                    {facility?.location && (
+                        <p className="text-sm sm:text-base text-muted-foreground font-medium flex items-center justify-center sm:justify-start gap-1.5 mt-2">
+                            <MapPin className="w-4 h-4 text-primary" /> {facility.location}
+                        </p>
+                    )}
+                </div>
+            </div>
+        </div>
+      </section>
+
+      {/* SECCIÓN 2: Contenido Principal (Grid de 2 columnas en PC) */}
+      <section className="container max-w-5xl mx-auto px-4 pb-20">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 overflow-visible">
+            
+            {/* COLUMNA IZQUIERDA (Info, Reservas, Servicios) */}
+            <div className="lg:col-span-2 space-y-10">
+                
+                {/* Descripción */}
+                {facility?.description && (
+                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
+                        <h2 className="text-xl font-extrabold flex items-center gap-2.5"><Info className="w-5 h-5 text-primary"/> Sobre nosotros</h2>
+                        <p className="text-muted-foreground leading-relaxed whitespace-pre-line bg-muted rounded-2xl p-6 text-sm sm:text-base border border-border/50">
+                            {facility.description}
+                        </p>
+                    </motion.div>
+                )}
+
+                {/* Reservar Cancha */}
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="space-y-4">
+                    <h2 className="text-xl font-extrabold flex items-center gap-2.5"><Trophy className="w-5 h-5 text-primary"/> Reservá tu cancha</h2>
+                    
+                    {loadingSports ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {[1, 2].map((i) => <div key={i} className="glass-card rounded-2xl p-6 animate-pulse h-28 border border-border/50" />)}
+                        </div>
+                    ) : availableSports.length === 0 ? (
+                        <div className="text-center py-10 bg-muted rounded-2xl border border-dashed border-border">
+                            <p className="text-3xl mb-3">🏟️</p>
+                            <p className="text-sm font-semibold text-muted-foreground">Próximamente canchas disponibles</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {availableSports.map((sport, i) => (
+                                <motion.button key={sport.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.1 }}
+                                    onClick={() => navigate(tp(`/courts/${sport.id}`))}
+                                    className="bg-card border border-border shadow-sm rounded-2xl p-6 text-left hover:border-primary/50 hover:shadow-lg hover:-translate-y-1 transition-all group flex items-center gap-5"
+                                >
+                                    <div className="w-16 h-16 rounded-xl bg-primary/10 flex items-center justify-center text-4xl group-hover:scale-110 transition-transform shrink-0">
+                                        {sport.icon}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <h3 className="font-extrabold text-lg text-foreground group-hover:text-primary transition-colors">{sport.name}</h3>
+                                        <p className="text-sm text-muted-foreground font-medium flex items-center gap-1 mt-0.5 opacity-80 group-hover:opacity-100 transition-opacity">
+                                            Ver disponibilidad <ChevronRight className="w-3 h-3 transition-transform group-hover:translate-x-0.5" />
+                                        </p>
+                                    </div>
+                                </motion.button>
+                            ))}
+                        </div>
+                    )}
+                </motion.div>
+
+                {/* NUEVOS Servicios (Amenities) Visuales */}
+                {facility?.amenities && facility.amenities.length > 0 && (
+                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="space-y-5">
+                        <h2 className="text-xl font-extrabold flex items-center gap-2.5"><Star className="w-5 h-5 text-primary"/> Servicios del club</h2>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                            {facility.amenities.map((amenity, i) => {
+                                const Icon = getAmenityIcon(amenity);
+                                return (
+                                    <div key={i} className="flex flex-col items-center justify-center gap-2 p-5 rounded-2xl bg-muted border border-border/50 text-center transition-colors hover:border-primary/20 hover:bg-muted/80">
+                                        <div className="w-10 h-10 rounded-xl bg-background border border-border/70 flex items-center justify-center shadow-inner">
+                                            <Icon className="w-5 h-5 text-primary" />
+                                        </div>
+                                        <span className="text-xs font-semibold text-foreground tracking-tight leading-tight line-clamp-2">
+                                            {amenity}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </motion.div>
+                )}
+
+            </div>
+
+            {/* COLUMNA DERECHA (Horarios y Contacto) */}
+            <div className="space-y-6">
+                
+                {/* Tarjeta de Horarios */}
+                <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }} className="glass-card rounded-2xl p-6 shadow-sm border border-border/50">
+                    <h3 className="font-bold text-base mb-4 flex items-center gap-2"><Clock className="w-4 h-4 text-primary" /> Horarios de atención</h3>
+                    <div className="space-y-2.5">
+                        {DAYS.map((day, idx) => {
+                            const sched = schedules.find((s) => s.day_of_week === idx);
+                            const todayIdx = (new Date().getDay() + 6) % 7; // Convertimos Domingo (0) a índice 6
+                            const isToday = idx === todayIdx;
+
+                            return (
+                                <div key={idx} className={cn("flex justify-between items-center text-sm", isToday ? "font-bold text-primary" : "text-muted-foreground")}>
+                                    <span>{day} {isToday && "(Hoy)"}</span>
+                                    <span className={cn(isToday && "bg-primary/10 px-2 py-0.5 rounded")}>
+                                        {sched?.is_open ? `${sched.open_time.slice(0,5)} - ${sched.close_time.slice(0,5)}` : "Cerrado"}
+                                    </span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </motion.div>
+
+                {/* Tarjeta de Contacto y Ubicación */}
+                <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 }} className="glass-card rounded-2xl p-6 shadow-sm border border-border/50">
+                    <h3 className="font-bold text-base mb-4 flex items-center gap-2"><MapPin className="w-4 h-4 text-primary" /> Contacto y Ubicación</h3>
+                    
+                    <div className="space-y-3.5 mb-6">
+                        {facility?.phone && (
+                            <div className="flex items-center gap-3 text-sm">
+                                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0"><Phone className="w-4 h-4 text-foreground" /></div>
+                                <a href={`tel:${facility.phone}`} className="hover:text-primary font-medium transition-colors">{facility.phone}</a>
+                            </div>
+                        )}
+                        {facility?.email && (
+                            <div className="flex items-center gap-3 text-sm">
+                                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0"><Mail className="w-4 h-4 text-foreground" /></div>
+                                <a href={`mailto:${facility.email}`} className="hover:text-primary font-medium transition-colors truncate">{facility.email}</a>
+                            </div>
+                        )}
+                        {facility?.instagram_url && (
+                            <div className="flex items-center gap-3 text-sm">
+                                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0"><Instagram className="w-4 h-4 text-foreground" /></div>
+                                <a href={facility.instagram_url.startsWith('http') ? facility.instagram_url : `https://instagram.com/${facility.instagram_url.replace('@', '')}`} target="_blank" rel="noopener noreferrer" className="hover:text-primary font-medium transition-colors">
+                                    {facility.instagram_url}
+                                </a>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="space-y-3">
+                        {whatsappUrl && (
+                            <a href={whatsappUrl} target="_blank" rel="noopener noreferrer"
+                                className="w-full flex items-center justify-center gap-2 bg-[#25D366] text-white px-4 py-3 rounded-xl font-bold text-sm hover:bg-[#20bd5a] transition-colors shadow-sm hover:shadow">
+                                <MessageCircle className="w-5 h-5" /> Contactar por WhatsApp
+                            </a>
+                        )}
+                        
+                        {facility?.maps_url && (
+                            <a href={facility.maps_url} target="_blank" rel="noopener noreferrer"
+                                className="w-full flex items-center justify-center gap-2 bg-secondary text-secondary-foreground px-4 py-3 rounded-xl font-bold text-sm hover:opacity-90 transition-opacity border border-border/50">
+                                <Map className="w-4 h-4" /> Ver en Google Maps
+                            </a>
+                        )}
+                    </div>
+                </motion.div>
+
+            </div>
+
+        </div>
+      </section>
     </PlayerLayout>
   );
 };

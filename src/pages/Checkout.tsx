@@ -7,7 +7,7 @@ import { useCourt, useAddons } from "@/hooks/use-supabase-data";
 import { useTenantPath } from "@/hooks/use-tenant";
 import PlayerLayout from "@/components/layout/PlayerLayout";
 import { cn } from "@/lib/utils";
-import { Check, MapPin, Clock, CreditCard, User, Mail, Phone, Loader2 } from "lucide-react";
+import { Check, Clock, CreditCard, User, Mail, Phone, Loader2, Trophy, Calendar, ShieldCheck } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -19,7 +19,6 @@ const Checkout = () => {
   const date = params.get("date");
   const time = params.get("time");
   
-  // Estas consultas tardan unos milisegundos en traer datos
   const { data: court } = useCourt(courtId || undefined);
   const { data: addons = [] } = useAddons();
 
@@ -30,12 +29,14 @@ const Checkout = () => {
   const [phone, setPhone] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
+  
+  // NUEVO: Estado para mostrar los errores visuales solo después de intentar pagar
+  const [showErrors, setShowErrors] = useState(false);
 
   const endHour = time ? parseInt(time.split(":")[0]) + 1 : 0;
   const endTime = `${endHour.toString().padStart(2, "0")}:00`;
   const dateObj = date ? parse(date, "yyyy-MM-dd", new Date()) : new Date();
 
-  // Variables de Mercado Pago
   const mpStatus = params.get("status");
   const mpFailed = params.get("mp_failed");
 
@@ -44,19 +45,15 @@ const Checkout = () => {
     [selectedAddons, addons]
   );
   
-  // Solo calculamos el total si 'court' ya cargó
   const total = court ? (court.price_per_hour + addonsTotal) : 0;
   const depositAmount = Math.round(total * 0.4);
 
-  // 1. EL USE EFFECT DEBE ESTAR ARRIBA (Antes del if de retorno)
   useEffect(() => {
-    // Si falla o se cancela
     if (mpFailed === "1" || mpStatus === "failure" || mpStatus === "null") {
       toast({ title: "El pago no se completó", description: "Podés intentar nuevamente.", variant: "destructive" });
       return;
     }
 
-    // Si está aprobado, esperamos a que 'court' tenga datos para armar la URL
     if (mpStatus === "approved" && !isConfirming && court) {
       setIsConfirming(true);
       const confirmParams = new URLSearchParams({
@@ -73,32 +70,38 @@ const Checkout = () => {
     }
   }, [mpStatus, mpFailed, isConfirming, navigate, tp, courtId, court, date, time, endTime, total, payDeposit, depositAmount, selectedAddons]);
 
-  // 2. LA PANTALLA DE CARGA (Para cuando vuelve de MP)
   if (isConfirming || mpStatus === "approved") {
     return (
       <PlayerLayout title="Procesando...">
         <div className="flex flex-col items-center justify-center py-20 gap-3">
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          <span className="text-sm text-muted-foreground">Generando tu comprobante...</span>
+          <span className="text-sm font-medium text-muted-foreground">Generando tu comprobante...</span>
         </div>
       </PlayerLayout>
     );
   }
 
-  // 3. EL FILTRO DE SEGURIDAD (Si faltan datos y no estamos volviendo de un pago, no mostramos nada)
   if (!court || !date || !time) return null;
 
   const toggleAddon = (id: string) =>
     setSelectedAddons((prev) => (prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]));
 
-  const isValid = name.trim().length >= 2 && /\S+@\S+\.\S+/.test(email) && phone.trim().length >= 8;
+  // NUEVO: Validaciones separadas para saber qué campo pintar de rojo
+  const isNameValid = name.trim().length >= 2;
+  const isEmailValid = /\S+@\S+\.\S+/.test(email);
+  const isPhoneValid = phone.trim().length >= 8;
+  const isValid = isNameValid && isEmailValid && isPhoneValid;
 
   const handlePay = async () => {
+    // Si faltan datos, prendemos la alerta roja y frenamos
     if (!isValid) {
-      toast({ title: "Completá todos los campos correctamente", variant: "destructive" });
+      setShowErrors(true);
+      toast({ title: "Faltan completar datos", description: "Revisá los campos en rojo para poder continuar.", variant: "destructive" });
       return;
     }
+    
     setIsProcessing(true);
+    setShowErrors(false); // Limpiamos errores si estaba todo bien
 
     try {
       const amountToPay = payDeposit ? depositAmount : total;
@@ -149,50 +152,88 @@ const Checkout = () => {
   };
 
   return (
-    <PlayerLayout showBack backTo={tp(`/booking/${courtId}`)} title="Checkout">
-      <div className="container px-4 py-6 pb-32">
-        {/* Summary */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-2xl p-5 mb-4">
-          <h3 className="font-extrabold text-lg mb-3">Resumen de tu reserva</h3>
-          <div className="space-y-2.5 text-sm">
-            <div className="flex items-center gap-2"><MapPin className="w-4 h-4 text-primary shrink-0" /><span className="font-medium truncate">{court.name}</span><span className="ml-auto text-muted-foreground shrink-0">{court.surface}</span></div>
-            <div className="flex items-center gap-2 flex-wrap"><Clock className="w-4 h-4 text-primary shrink-0" /><span className="truncate">{format(dateObj, "EEEE d 'de' MMMM", { locale: es })}</span><span className="ml-auto font-semibold shrink-0">{time} - {endTime}</span></div>
-          </div>
+    // FIX TÍTULO: Acortamos a "Reserva"
+    <PlayerLayout showBack backTo={tp(`/booking/${courtId}`)} title="Reserva">
+      <div className="container max-w-3xl mx-auto px-4 py-6 pb-32">
+        
+        {/* Resumen */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card rounded-2xl overflow-hidden border border-border shadow-sm mb-6 flex flex-col sm:flex-row">
+            <div className="w-full sm:w-48 h-36 sm:h-auto bg-muted shrink-0 relative border-b sm:border-b-0 sm:border-r border-border/50">
+                {court.image_url ? (
+                    <img src={court.image_url} alt={court.name} className="w-full h-full object-cover" />
+                ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-primary/10 to-muted flex items-center justify-center">
+                        <Trophy className="w-8 h-8 text-muted-foreground/30" />
+                    </div>
+                )}
+            </div>
+            <div className="p-4 sm:p-5 flex-1 flex flex-col justify-center">
+                <div className="flex justify-between items-start mb-3 gap-2">
+                    <h3 className="font-extrabold text-xl text-foreground">{court.name}</h3>
+                    <span className="bg-primary/10 text-primary px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider shrink-0">{court.surface}</span>
+                </div>
+                <div className="space-y-2 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2.5">
+                        <Calendar className="w-4 h-4 text-primary shrink-0" />
+                        <span className="font-medium capitalize text-foreground/80">{format(dateObj, "EEEE d 'de' MMMM", { locale: es })}</span>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                        <Clock className="w-4 h-4 text-primary shrink-0" />
+                        <span className="font-medium text-foreground/80">{time} a {endTime} hs</span>
+                    </div>
+                </div>
+            </div>
         </motion.div>
 
-        {/* Contact info */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="glass-card rounded-2xl p-5 mb-4">
-          <h3 className="font-bold text-sm mb-3">Tus datos</h3>
+        {/* Contact info con validación visual en rojo */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="glass-card rounded-2xl p-5 mb-5 shadow-sm border border-border/50">
+          <h3 className="font-bold text-base mb-4 flex items-center gap-2"><User className="w-4 h-4 text-primary" /> Tus datos</h3>
           <div className="space-y-3">
-            <div className="flex items-center gap-3 border border-border rounded-xl px-3 py-2.5 focus-within:border-primary transition-colors">
-              <User className="w-4 h-4 text-muted-foreground shrink-0" />
-              <input type="text" placeholder="Nombre completo" value={name} onChange={(e) => setName(e.target.value)} className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground min-w-0" />
+            
+            {/* Input Nombre */}
+            <div className={cn("flex items-center gap-3 border rounded-xl px-3.5 py-3 transition-all bg-background/50",
+              showErrors && !isNameValid ? "border-destructive/80 text-destructive focus-within:ring-1 focus-within:ring-destructive/20 bg-destructive/5" : "border-border focus-within:border-primary focus-within:ring-1 focus-within:ring-primary/20"
+            )}>
+              <User className={cn("w-4 h-4 shrink-0", showErrors && !isNameValid ? "text-destructive" : "text-muted-foreground")} />
+              <input type="text" placeholder="Nombre completo" value={name} onChange={(e) => setName(e.target.value)} 
+                className={cn("flex-1 bg-transparent text-sm font-medium outline-none min-w-0 placeholder:font-normal", showErrors && !isNameValid ? "placeholder:text-destructive/60" : "placeholder:text-muted-foreground")} />
             </div>
-            <div className="flex items-center gap-3 border border-border rounded-xl px-3 py-2.5 focus-within:border-primary transition-colors">
-              <Mail className="w-4 h-4 text-muted-foreground shrink-0" />
-              <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground min-w-0" />
+
+            {/* Input Email */}
+            <div className={cn("flex items-center gap-3 border rounded-xl px-3.5 py-3 transition-all bg-background/50",
+              showErrors && !isEmailValid ? "border-destructive/80 text-destructive focus-within:ring-1 focus-within:ring-destructive/20 bg-destructive/5" : "border-border focus-within:border-primary focus-within:ring-1 focus-within:ring-primary/20"
+            )}>
+              <Mail className={cn("w-4 h-4 shrink-0", showErrors && !isEmailValid ? "text-destructive" : "text-muted-foreground")} />
+              <input type="email" placeholder="Correo electrónico" value={email} onChange={(e) => setEmail(e.target.value)} 
+                className={cn("flex-1 bg-transparent text-sm font-medium outline-none min-w-0 placeholder:font-normal", showErrors && !isEmailValid ? "placeholder:text-destructive/60" : "placeholder:text-muted-foreground")} />
             </div>
-            <div className="flex items-center gap-3 border border-border rounded-xl px-3 py-2.5 focus-within:border-primary transition-colors">
-              <Phone className="w-4 h-4 text-muted-foreground shrink-0" />
-              <input type="tel" placeholder="Teléfono" value={phone} onChange={(e) => setPhone(e.target.value)} className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground min-w-0" />
+
+            {/* Input Teléfono */}
+            <div className={cn("flex items-center gap-3 border rounded-xl px-3.5 py-3 transition-all bg-background/50",
+              showErrors && !isPhoneValid ? "border-destructive/80 text-destructive focus-within:ring-1 focus-within:ring-destructive/20 bg-destructive/5" : "border-border focus-within:border-primary focus-within:ring-1 focus-within:ring-primary/20"
+            )}>
+              <Phone className={cn("w-4 h-4 shrink-0", showErrors && !isPhoneValid ? "text-destructive" : "text-muted-foreground")} />
+              <input type="tel" placeholder="Número de WhatsApp" value={phone} onChange={(e) => setPhone(e.target.value)} 
+                className={cn("flex-1 bg-transparent text-sm font-medium outline-none min-w-0 placeholder:font-normal", showErrors && !isPhoneValid ? "placeholder:text-destructive/60" : "placeholder:text-muted-foreground")} />
             </div>
+
           </div>
         </motion.div>
 
         {/* Addons */}
         {addons.length > 0 && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="glass-card rounded-2xl p-5 mb-4">
-            <h3 className="font-bold text-sm mb-3">¿Querés agregar extras?</h3>
-            <div className="space-y-2">
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="glass-card rounded-2xl p-5 mb-5 shadow-sm border border-border/50">
+            <h3 className="font-bold text-base mb-4">¿Querés agregar extras?</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {addons.map((addon) => {
                 const isSelected = selectedAddons.includes(addon.id);
                 return (
                   <button key={addon.id} onClick={() => toggleAddon(addon.id)}
-                    className={cn("w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left",
-                      isSelected ? "border-primary bg-primary/5" : "border-border hover:border-primary/30")}>
-                    <span className="text-xl shrink-0">{addon.icon}</span>
+                    className={cn("w-full flex items-center gap-3 p-3.5 rounded-xl border-2 transition-all text-left bg-background/50",
+                      isSelected ? "border-primary bg-primary/5 shadow-sm" : "border-border/50 hover:border-primary/30")}>
+                    <span className="text-2xl shrink-0">{addon.icon}</span>
                     <span className="flex-1 font-medium text-sm min-w-0 truncate">{addon.name}</span>
-                    <span className="text-sm font-bold shrink-0">+${addon.price.toLocaleString()}</span>
+                    <span className="text-sm font-bold shrink-0 text-primary">+${addon.price.toLocaleString()}</span>
                     <div className={cn("w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors shrink-0",
                       isSelected ? "bg-primary border-primary" : "border-border")}>
                       {isSelected && <Check className="w-3 h-3 text-primary-foreground" />}
@@ -205,35 +246,44 @@ const Checkout = () => {
         )}
 
         {/* Payment */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="glass-card rounded-2xl p-5 mb-4">
-          <h3 className="font-bold text-sm mb-3 flex items-center gap-2"><CreditCard className="w-4 h-4 text-primary" /> Forma de pago</h3>
-          <div className="space-y-2">
-            <button onClick={() => setPayDeposit(true)} className={cn("w-full p-3 rounded-xl border transition-all text-left", payDeposit ? "border-primary bg-primary/5" : "border-border")}>
-              <p className="font-semibold text-sm">Seña (40%)</p>
-              <p className="text-xs text-muted-foreground">Pagás ${depositAmount.toLocaleString()} ahora, el resto al llegar</p>
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="glass-card rounded-2xl p-5 mb-4 shadow-sm border border-border/50">
+          <h3 className="font-bold text-base mb-4 flex items-center gap-2"><CreditCard className="w-4 h-4 text-primary" /> Opción de pago</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button onClick={() => setPayDeposit(true)} className={cn("w-full p-4 rounded-xl border-2 transition-all text-left bg-background/50", payDeposit ? "border-primary bg-primary/5 shadow-sm" : "border-border/50 hover:border-primary/30")}>
+              <div className="flex justify-between items-center mb-1">
+                  <p className="font-bold text-sm">Seña (40%)</p>
+                  {payDeposit && <div className="w-2 h-2 rounded-full bg-primary"></div>}
+              </div>
+              <p className="text-xs text-muted-foreground">Pagás <strong className="text-foreground">${depositAmount.toLocaleString()}</strong> ahora, el resto al llegar al predio.</p>
             </button>
-            <button onClick={() => setPayDeposit(false)} className={cn("w-full p-3 rounded-xl border transition-all text-left", !payDeposit ? "border-primary bg-primary/5" : "border-border")}>
-              <p className="font-semibold text-sm">Pago total</p>
-              <p className="text-xs text-muted-foreground">Pagás ${total.toLocaleString()} y listo</p>
+            <button onClick={() => setPayDeposit(false)} className={cn("w-full p-4 rounded-xl border-2 transition-all text-left bg-background/50", !payDeposit ? "border-primary bg-primary/5 shadow-sm" : "border-border/50 hover:border-primary/30")}>
+              <div className="flex justify-between items-center mb-1">
+                  <p className="font-bold text-sm">Pago Total</p>
+                  {!payDeposit && <div className="w-2 h-2 rounded-full bg-primary"></div>}
+              </div>
+              <p className="text-xs text-muted-foreground">Pagás <strong className="text-foreground">${total.toLocaleString()}</strong> ahora y te olvidás.</p>
             </button>
           </div>
         </motion.div>
 
-        {/* Bottom bar */}
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/95 backdrop-blur-md border-t border-border z-30">
-          <div className="container">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm text-muted-foreground">Total</span>
-              <span className="font-extrabold text-lg">${total.toLocaleString()}</span>
+        {/* Bottom bar mejorada */}
+        <div className="fixed bottom-0 left-0 right-0 p-4 sm:p-5 bg-background/95 backdrop-blur-xl border-t border-border shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] z-30">
+          <div className="container max-w-3xl mx-auto flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <span className="text-[10px] sm:text-xs uppercase font-bold text-muted-foreground tracking-wider mb-0.5 block">Total a pagar ahora</span>
+              <span className="text-2xl sm:text-3xl font-black text-foreground leading-none">${(payDeposit ? depositAmount : total).toLocaleString()}</span>
             </div>
-            <button onClick={handlePay} disabled={isProcessing || !isValid}
-              className="w-full bg-primary text-primary-foreground py-3.5 rounded-xl font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2">
-              {isProcessing && <Loader2 className="w-4 h-4 animate-spin" />}
-              {isProcessing
-                ? "Redirigiendo a MercadoPago..."
-                : payDeposit
-                ? `Pagar seña $${depositAmount.toLocaleString()}`
-                : `Pagar $${total.toLocaleString()}`}
+            
+            {/* FIX BOTÓN: Quitamos la validación del disabled para que pueda hacer clic y ver el error */}
+            <button onClick={handlePay} disabled={isProcessing}
+              className={cn("bg-[#009EE3] text-white px-5 sm:px-8 py-3.5 sm:py-4 rounded-2xl font-bold text-sm sm:text-base shadow-lg transition-all flex items-center gap-2 shrink-0", 
+              isProcessing ? "opacity-50 cursor-not-allowed" : "hover:shadow-xl hover:bg-[#008cc9] hover:scale-105 active:scale-95")}>
+              {isProcessing ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                  <ShieldCheck className="w-5 h-5 hidden sm:block" />
+              )}
+              {isProcessing ? "Redirigiendo..." : "Pagar con Mercado Pago"}
             </button>
           </div>
         </div>
