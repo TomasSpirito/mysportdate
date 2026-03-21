@@ -379,10 +379,23 @@ export function useCreateExpense() {
   return useMutation({ mutationFn: async (expense: { category: string; description?: string; amount: number; expense_date: string }) => { if (!facilityId) throw new Error("No facility"); const { error } = await supabase.from("expenses").insert({ ...expense, facility_id: facilityId }); if (error) throw error; }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["expenses"] }); qc.invalidateQueries({ queryKey: ["expenses-range"] }); } });
 }
 
+export function useUpdateExpense() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: { id: string; category?: string; description?: string; amount?: number; expense_date?: string }) => {
+      const { error } = await supabase.from("expenses").update(updates as any).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["expenses"] }); },
+  });
+}
+
 export function useDeleteExpense() {
   const qc = useQueryClient();
   return useMutation({ mutationFn: async (id: string) => { const { error } = await supabase.from("expenses").delete().eq("id", id); if (error) throw error; }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["expenses"] }); qc.invalidateQueries({ queryKey: ["expenses-range"] }); } });
 }
+
+
 
 // Facility Schedules
 export function useFacilitySchedules() {
@@ -442,12 +455,15 @@ export function useCreateBuffetProduct() {
   const facilityId = useFacilityId();
   const qc = useQueryClient();
   return useMutation({
-    // ACTUALIZACIÓN DE PARÁMETROS: Agregamos image_url como opcional
     mutationFn: async (product: { name: string; category: string; price: number; stock: number; image_url?: string }) => {
       if (!facilityId) throw new Error("No facility");
-      // Ahora inserta el objeto 'product' completo que incluye image_url
-      const { error } = await supabase.from("buffet_products").insert({ ...product, facility_id: facilityId } as any);
+      const { data, error } = await supabase
+        .from("buffet_products")
+        .insert({ ...product, facility_id: facilityId } as any)
+        .select() // <-- PEDIMOS QUE NOS DEVUELVA EL REGISTRO
+        .single(); // <-- COMO ES UNO SOLO, USAMOS SINGLE
       if (error) throw error;
+      return data; // <-- DEVOLVEMOS LA DATA PARA USAR SU ID
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["buffet-products"] }); },
   });
@@ -577,4 +593,24 @@ export function useUploadBuffetImage() {
   };
 
   return { uploadImage, uploadingImage };
+}
+// --- Buffet Purchases ---
+export function useCreateBuffetPurchase() {
+  const queryClient = useQueryClient();
+  const facilityId = useFacilityId();
+  return useMutation({
+    mutationFn: async (purchase: { product_id: string; quantity: number; unit_price: number; total_price: number }) => {
+      if (!facilityId) throw new Error("No facility");
+      const { data, error } = await supabase
+        .from('buffet_purchases')
+        .insert([{ ...purchase, facility_id: facilityId }]);
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      // Refrescamos el buffet y los gastos para que se actualice todo mágicamente
+      queryClient.invalidateQueries({ queryKey: ['buffet_products'] });
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+    }
+  });
 }
