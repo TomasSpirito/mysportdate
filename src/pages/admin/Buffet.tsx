@@ -5,34 +5,28 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
-} from "@/components/ui/dialog";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import { Plus, Minus, ShoppingCart, Trash2, Package, Loader2, Search, ImageIcon, Upload, RefreshCcw, Pencil, AlertTriangle } from "lucide-react";
-import {
-  useBuffetProducts, useCreateBuffetProduct, useUpdateBuffetProduct, useDeleteBuffetProduct, useCreateBuffetSale,
-  type BuffetProduct, useUploadBuffetImage,
-} from "@/hooks/use-supabase-data";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, Minus, ShoppingCart, Trash2, Package, Loader2, Search, ImageIcon, Upload, RefreshCcw, Pencil, AlertTriangle, Banknote, SmartphoneNfc, CreditCard } from "lucide-react";
+import { useBuffetProducts, useCreateBuffetProduct, useUpdateBuffetProduct, useDeleteBuffetProduct, useCreateBuffetSale, type BuffetProduct, useUploadBuffetImage } from "@/hooks/use-supabase-data";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 const CATEGORIES = ["Todas", "Bebidas", "Snacks", "Comidas"];
 
+// NUEVO: Array de métodos de pago con colores específicos
+const PAYMENT_METHODS = [
+  { value: "efectivo", label: "Efectivo", icon: Banknote, hoverBorder: "hover:border-[#00a650]", hoverBg: "hover:bg-[#00a650]/10", hoverText: "group-hover:text-[#00a650]" },
+  { value: "mercadopago", label: "Mercado Pago", icon: SmartphoneNfc, hoverBorder: "hover:border-[#009EE3]", hoverBg: "hover:bg-[#009EE3]/10", hoverText: "group-hover:text-[#009EE3]" },
+  { value: "tarjeta", label: "Tarjeta", icon: CreditCard, hoverBorder: "hover:border-purple-500", hoverBg: "hover:bg-purple-500/10", hoverText: "group-hover:text-purple-600" },
+];
+
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
   useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-    return () => {
-      clearTimeout(handler);
-    };
+    const handler = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(handler);
   }, [value, delay]);
   return debouncedValue;
 }
@@ -53,11 +47,9 @@ const Buffet = () => {
 
   const [cart, setCart] = useState<CartItem[]>([]);
   
-  // --- NUEVOS ESTADOS DE FILTRO GLOBAL ---
   const [categoryFilter, setCategoryFilter] = useState("Todas");
   const [searchTerm, setSearchTerm] = useState("");
 
-  // --- ESTADOS DEL MODAL (Nuevo y Edición) ---
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
@@ -77,10 +69,7 @@ const Buffet = () => {
   const searchImages = useCallback(async (query: string) => {
     if (!query || query.length < 3) return;
     const accessKey = import.meta.env.VITE_UNSPLASH_ACCESS_KEY;
-    if (!accessKey) {
-      console.warn("Falta VITE_UNSPLASH_ACCESS_KEY en el .env.");
-      return;
-    }
+    if (!accessKey) return;
     setSearchingImages(true);
     try {
       const response = await fetch(`https://api.unsplash.com/search/photos?page=1&query=${encodeURIComponent(query)}&per_page=3&client_id=${accessKey}`);
@@ -95,9 +84,7 @@ const Buffet = () => {
 
   useEffect(() => {
     if (debouncedName && debouncedName.trim().length > 2) {
-      if (!uploadingImage && !newImageUrl.includes('supabase')) {
-          searchImages(debouncedName.trim());
-      }
+      if (!uploadingImage && !newImageUrl.includes('supabase')) searchImages(debouncedName.trim());
     } else {
       setImageResults([]);
       setNewImageUrl(""); 
@@ -107,7 +94,6 @@ const Buffet = () => {
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-
     if (!file.type.startsWith('image/')) return toast({ title: "Error", description: "El archivo debe ser una imagen", variant: "destructive" });
     if (file.size > 2 * 1024 * 1024) return toast({ title: "Error", description: "La imagen es muy pesada (max 2MB)", variant: "destructive" });
 
@@ -141,12 +127,14 @@ const Buffet = () => {
   const removeFromCart = (id: string) => setCart((prev) => prev.filter((i) => i.product.id !== id));
   const cartTotal = cart.reduce((sum, i) => sum + i.product.price * i.qty, 0);
 
-  const handleCharge = async () => {
+  // ACTUALIZADO: handleCharge ahora recibe el método de pago seleccionado
+  const handleCharge = async (paymentMethod: string) => {
     try {
       await createSale.mutateAsync({
         total: cartTotal,
         items: cart.map((i) => ({ product_id: i.product.id, product_name: i.product.name, quantity: i.qty, unit_price: i.product.price })),
-      });
+        payment_method: paymentMethod // GUARDAMOS EL MÉTODO DE PAGO AQUÍ
+      } as any);
       setCart([]);
       toast({ title: "Venta registrada ✅" });
     } catch {
@@ -207,7 +195,6 @@ const Buffet = () => {
     }
   };
 
-  // --- FILTRADO GLOBAL (Categoría + Búsqueda) ---
   const filteredProducts = products.filter((p) => {
     const matchCategory = categoryFilter === "Todas" || p.category === categoryFilter;
     const matchSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -244,7 +231,6 @@ const Buffet = () => {
             <TabsTrigger value="inventory">Inventario</TabsTrigger>
           </TabsList>
 
-          {/* BARRA DE HERRAMIENTAS GLOBAL (Filtros + Buscador) */}
           <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center pb-2">
             <div className="flex gap-2 flex-wrap">
               {CATEGORIES.map((cat) => (
@@ -256,12 +242,7 @@ const Buffet = () => {
             
             <div className="relative w-full sm:max-w-xs">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input 
-                  placeholder="Buscar producto..." 
-                  className="pl-9 bg-card"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
+                <Input placeholder="Buscar producto..." className="pl-9 bg-card" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
           </div>
 
@@ -284,10 +265,7 @@ const Buffet = () => {
                       const hasLowStock = !isOutOfStock && p.stock <= limit;
 
                       return (
-                        <button
-                          key={p.id}
-                          onClick={() => !isOutOfStock && addToCart(p)}
-                          disabled={isOutOfStock}
+                        <button key={p.id} onClick={() => !isOutOfStock && addToCart(p)} disabled={isOutOfStock}
                           className="group rounded-xl border bg-card text-card-foreground p-3 text-left transition-all hover:shadow-md hover:border-primary/40 disabled:opacity-40 disabled:cursor-not-allowed flex flex-col h-full"
                         >
                           <div className="w-full aspect-square rounded-lg bg-muted flex items-center justify-center mb-3 overflow-hidden border border-border relative">
@@ -309,7 +287,6 @@ const Buffet = () => {
                               <p className="text-xs text-muted-foreground mb-2">{p.category}</p>
                               <div className="flex items-center justify-between mt-auto">
                                 <span className="font-bold text-primary text-lg">${p.price.toLocaleString()}</span>
-                                {/* ALERTA MOVIDA ABAJO A LA DERECHA */}
                                 {hasLowStock && (
                                     <div className="p-1.5 rounded-full bg-orange-500 shadow-sm text-white animate-pulse" title="Poco stock">
                                         <AlertTriangle className="w-4 h-4" />
@@ -338,7 +315,7 @@ const Buffet = () => {
                         <p className="text-muted-foreground text-xs px-4">Hacé clic en un producto para agregarlo.</p>
                     </div>
                   ) : (
-                    <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-2 -mr-2 scrollbar-thin">
+                    <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-2 -mr-2 scrollbar-thin">
                       {cart.map((item) => (
                         <div key={item.product.id} className="flex items-center gap-2 pb-2 border-b border-border last:border-0 last:pb-0">
                           <div className="w-9 h-9 rounded bg-muted flex items-center justify-center overflow-hidden border border-border shrink-0">
@@ -362,15 +339,31 @@ const Buffet = () => {
                     </div>
                   )}
 
+                  {/* NUEVA SECCIÓN DE COBRO CON MÉTODOS DE PAGO */}
                   <div className="border-t border-border pt-3 space-y-3">
-                    <div className="flex justify-between font-bold text-lg">
-                      <span>Total</span>
+                    <div className="flex justify-between font-bold text-lg mb-2">
+                      <span>Total a cobrar</span>
                       <span className="text-primary">${cartTotal.toLocaleString()}</span>
                     </div>
-                    <Button className="w-full h-11 text-base font-bold bg-primary hover:bg-primary/90 text-primary-foreground" disabled={cart.length === 0 || createSale.isPending} onClick={handleCharge}>
-                      {createSale.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                      Cobrar ${cartTotal.toLocaleString()}
-                    </Button>
+                    
+                    {createSale.isPending ? (
+                         <div className="w-full h-11 flex items-center justify-center bg-primary text-primary-foreground rounded-xl font-bold">
+                             <Loader2 className="w-4 h-4 animate-spin mr-2" /> Registrando...
+                         </div>
+                    ) : (
+                        <div className={cn("grid gap-2", cart.length === 0 ? "opacity-50 pointer-events-none" : "")}>
+                            {PAYMENT_METHODS.map(pm => (
+                                <button key={pm.value} onClick={() => handleCharge(pm.value)}
+                                    className={cn("flex items-center justify-between px-4 py-2.5 rounded-xl border border-border bg-background transition-all font-bold text-sm group", pm.hoverBorder, pm.hoverBg)}>
+                                    <div className="flex items-center gap-2 text-muted-foreground transition-colors">
+                                        <pm.icon className={cn("w-4 h-4", pm.hoverText)} /> 
+                                        <span className="text-foreground">{pm.label}</span>
+                                    </div>
+                                    <span className={cn("text-xs opacity-0 group-hover:opacity-100 transition-opacity", pm.hoverText)}>Cobrar</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
                   </div>
                 </div>
               </div>

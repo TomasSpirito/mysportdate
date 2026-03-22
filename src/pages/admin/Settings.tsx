@@ -1,12 +1,19 @@
 import { useState, useEffect, useRef } from "react";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { useFacility, useUpdateFacility, useFacilitySchedules, useUpsertFacilitySchedule, useUploadFacilityImage } from "@/hooks/use-supabase-data";
-import { Clock, MapPin, Phone, Save, Mail, MessageCircle, Link2, Copy, Check, Image as ImageIcon, Instagram, Map, Info, Star, Upload, Plus } from "lucide-react"; // <-- Agregamos Plus
+import { Clock, MapPin, Phone, Save, Mail, MessageCircle, Link2, Copy, Check, Image as ImageIcon, Instagram, Map, Info, Star, Upload, Plus, Percent, ShieldCheck } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 
 const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 const PREDEFINED_AMENITIES = ["WiFi", "Estacionamiento", "Vestuarios", "Duchas", "Buffet / Bar", "Parrilla", "Salón de eventos", "Seguridad", "Iluminación LED"];
+
+// Generamos opciones de horario de 1 en 1 hora (00:00, 01:00, etc.)
+const TIME_OPTIONS = Array.from({ length: 24 }, (_, i) => {
+  const h = i.toString().padStart(2, "0");
+  return `${h}:00`;
+});
 
 const AdminSettings = () => {
   const { data: facility } = useFacility();
@@ -20,12 +27,12 @@ const AdminSettings = () => {
   const [facilityForm, setFacilityForm] = useState({ 
       name: "", location: "", phone: "", email: "", whatsapp: "",
       description: "", maps_url: "", instagram_url: "", logo_url: "", cover_url: "",
-      amenities: [] as string[]
+      amenities: [] as string[],
+      requires_deposit: false,
+      deposit_percentage: 50
   });
   
   const [localSchedules, setLocalSchedules] = useState<{ day_of_week: number; is_open: boolean; open_time: string; close_time: string }[]>([]);
-  
-  // NUEVO: Estado para el servicio personalizado
   const [customAmenity, setCustomAmenity] = useState("");
 
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -47,13 +54,21 @@ const AdminSettings = () => {
         logo_url: facility.logo_url || "",
         cover_url: facility.cover_url || "",
         amenities: facility.amenities || [],
+        requires_deposit: facility.requires_deposit || false,
+        deposit_percentage: facility.deposit_percentage || 50,
       });
     }
   }, [facility]);
 
   useEffect(() => {
     if (schedules.length > 0) {
-      setLocalSchedules(schedules.map((s) => ({ day_of_week: s.day_of_week, is_open: s.is_open, open_time: s.open_time, close_time: s.close_time })));
+      // CORRECCIÓN CLAVE: .slice(0, 5) formatea "08:00:00" a "08:00" para que coincida perfecto con el Select
+      setLocalSchedules(schedules.map((s) => ({ 
+          day_of_week: s.day_of_week, 
+          is_open: s.is_open, 
+          open_time: s.open_time.slice(0, 5), 
+          close_time: s.close_time.slice(0, 5) 
+      })));
     } else {
       setLocalSchedules(DAYS.map((_, i) => ({ day_of_week: i, is_open: true, open_time: "08:00", close_time: "23:00" })));
     }
@@ -91,44 +106,33 @@ const AdminSettings = () => {
   const toggleAmenity = (amenity: string) => {
       setFacilityForm(prev => ({
           ...prev,
-          amenities: prev.amenities.includes(amenity) 
-            ? prev.amenities.filter(a => a !== amenity)
-            : [...prev.amenities, amenity]
+          amenities: prev.amenities.includes(amenity) ? prev.amenities.filter(a => a !== amenity) : [...prev.amenities, amenity]
       }));
   };
 
-  // NUEVO: Lógica para agregar servicio personalizado
   const handleAddCustomAmenity = (e: React.FormEvent) => {
       e.preventDefault();
       const trimmed = customAmenity.trim();
       if (!trimmed) return;
-      
       if (!facilityForm.amenities.includes(trimmed)) {
-          setFacilityForm(prev => ({
-              ...prev,
-              amenities: [...prev.amenities, trimmed]
-          }));
+          setFacilityForm(prev => ({ ...prev, amenities: [...prev.amenities, trimmed] }));
       }
-      setCustomAmenity(""); // Limpiamos el input
+      setCustomAmenity(""); 
   };
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>, type: 'logo' | 'cover') => {
       const file = event.target.files?.[0];
       if (!file) return;
       if (!file.type.startsWith('image/')) { toast({ title: "Debe ser una imagen", variant: "destructive" }); return; }
-      
       try {
           const url = await uploadImage(file, type);
           setFacilityForm(prev => ({ ...prev, [type === 'logo' ? 'logo_url' : 'cover_url']: url }));
           toast({ title: "Imagen subida ✅" });
-      } catch (e) {
-          // Error handled in hook
-      } finally {
+      } catch (e) {} finally {
           event.target.value = '';
       }
   };
 
-  // Combinamos los servicios predefinidos con los personalizados que ya tenga el predio
   const allAmenities = Array.from(new Set([...PREDEFINED_AMENITIES, ...facilityForm.amenities]));
 
   return (
@@ -144,12 +148,10 @@ const AdminSettings = () => {
         </button>
       </div>
 
-      {/* NUEVO LAYOUT: Grid de 2 columnas en pantallas grandes (lg) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pb-20">
         
         {/* COLUMNA IZQUIERDA (7 de 12 espacios) */}
         <div className="lg:col-span-7 space-y-6">
-            {/* Shareable link */}
             {publicUrl && (
             <div className="glass-card rounded-2xl p-6 border-2 border-primary/20 bg-primary/5">
                 <h3 className="font-bold mb-3 flex items-center gap-2"><Link2 className="w-4 h-4 text-primary" /> Tu link para clientes</h3>
@@ -157,8 +159,7 @@ const AdminSettings = () => {
                 <div className="flex-1 bg-background border border-border rounded-xl px-4 py-2.5 text-sm font-mono truncate min-w-0 font-medium">
                     {publicUrl}
                 </div>
-                <button onClick={handleCopyLink}
-                    className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-opacity shrink-0 shadow-sm">
+                <button onClick={handleCopyLink} className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-opacity shrink-0 shadow-sm">
                     {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                     <span className="hidden sm:inline">{copied ? "Copiado" : "Copiar"}</span>
                 </button>
@@ -166,105 +167,88 @@ const AdminSettings = () => {
             </div>
             )}
 
-            {/* Diseño y Marca */}
             <div className="glass-card rounded-2xl p-6">
-            <h3 className="font-bold mb-4 flex items-center gap-2"><ImageIcon className="w-4 h-4 text-primary" /> Diseño y Marca</h3>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                {/* Logo */}
-                <div className="col-span-1 space-y-2">
-                    <label className="text-xs font-semibold text-muted-foreground block">Logo del Club</label>
-                    <button onClick={() => logoInputRef.current?.click()} disabled={uploadingImage}
-                        className="w-32 h-32 rounded-2xl border-2 border-dashed border-border flex flex-col items-center justify-center bg-muted/20 hover:bg-muted/50 transition-all overflow-hidden group relative mx-auto sm:mx-0">
-                        {facilityForm.logo_url ? (
-                            <>
-                                <img src={facilityForm.logo_url} alt="Logo" className="w-full h-full object-contain p-2 bg-white" />
-                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"><Upload className="w-6 h-6 text-white"/></div>
-                            </>
-                        ) : (
-                            <><Upload className="w-6 h-6 text-muted-foreground mb-2 group-hover:text-primary"/><span className="text-[10px] font-medium text-muted-foreground text-center">Subir Logo<br/>(Cuadrado)</span></>
-                        )}
-                    </button>
-                    <input type="file" accept="image/*" ref={logoInputRef} onChange={(e) => handleImageUpload(e, 'logo')} className="hidden" />
-                </div>
+                <h3 className="font-bold mb-4 flex items-center gap-2"><ImageIcon className="w-4 h-4 text-primary" /> Diseño y Marca</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                    <div className="col-span-1 space-y-2">
+                        <label className="text-xs font-semibold text-muted-foreground block">Logo del Club</label>
+                        <button onClick={() => logoInputRef.current?.click()} disabled={uploadingImage}
+                            className="w-32 h-32 rounded-2xl border-2 border-dashed border-border flex flex-col items-center justify-center bg-muted/20 hover:bg-muted/50 transition-all overflow-hidden group relative mx-auto sm:mx-0">
+                            {facilityForm.logo_url ? (
+                                <>
+                                    <img src={facilityForm.logo_url} alt="Logo" className="w-full h-full object-contain p-2 bg-white" />
+                                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"><Upload className="w-6 h-6 text-white"/></div>
+                                </>
+                            ) : (
+                                <><Upload className="w-6 h-6 text-muted-foreground mb-2 group-hover:text-primary"/><span className="text-[10px] font-medium text-muted-foreground text-center">Subir Logo<br/>(Cuadrado)</span></>
+                            )}
+                        </button>
+                        <input type="file" accept="image/*" ref={logoInputRef} onChange={(e) => handleImageUpload(e, 'logo')} className="hidden" />
+                    </div>
 
-                {/* Portada */}
-                <div className="col-span-1 sm:col-span-2 space-y-2">
-                    <label className="text-xs font-semibold text-muted-foreground block">Foto de Portada</label>
-                    <button onClick={() => coverInputRef.current?.click()} disabled={uploadingImage}
-                        className="w-full h-32 rounded-2xl border-2 border-dashed border-border flex flex-col items-center justify-center bg-muted/20 hover:bg-muted/50 transition-all overflow-hidden group relative">
-                        {facilityForm.cover_url ? (
-                            <>
-                                <img src={facilityForm.cover_url} alt="Portada" className="w-full h-full object-cover" />
-                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"><Upload className="w-6 h-6 text-white"/></div>
-                            </>
-                        ) : (
-                            <><ImageIcon className="w-6 h-6 text-muted-foreground mb-2 group-hover:text-primary"/><span className="text-[10px] font-medium text-muted-foreground">Subir Portada (Panorámica)</span></>
-                        )}
-                    </button>
-                    <input type="file" accept="image/*" ref={coverInputRef} onChange={(e) => handleImageUpload(e, 'cover')} className="hidden" />
+                    <div className="col-span-1 sm:col-span-2 space-y-2">
+                        <label className="text-xs font-semibold text-muted-foreground block">Foto de Portada</label>
+                        <button onClick={() => coverInputRef.current?.click()} disabled={uploadingImage}
+                            className="w-full h-32 rounded-2xl border-2 border-dashed border-border flex flex-col items-center justify-center bg-muted/20 hover:bg-muted/50 transition-all overflow-hidden group relative">
+                            {facilityForm.cover_url ? (
+                                <>
+                                    <img src={facilityForm.cover_url} alt="Portada" className="w-full h-full object-cover" />
+                                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"><Upload className="w-6 h-6 text-white"/></div>
+                                </>
+                            ) : (
+                                <><ImageIcon className="w-6 h-6 text-muted-foreground mb-2 group-hover:text-primary"/><span className="text-[10px] font-medium text-muted-foreground">Subir Portada (Panorámica)</span></>
+                            )}
+                        </button>
+                        <input type="file" accept="image/*" ref={coverInputRef} onChange={(e) => handleImageUpload(e, 'cover')} className="hidden" />
+                    </div>
                 </div>
             </div>
-            </div>
 
-            {/* Facility info */}
             <div className="glass-card rounded-2xl p-6">
-            <h3 className="font-bold mb-4 flex items-center gap-2"><Info className="w-4 h-4 text-primary" /> Información Pública</h3>
-            <div className="space-y-4">
-                <div>
-                <label className="text-xs font-semibold text-muted-foreground block mb-1">Nombre del complejo</label>
-                <input type="text" value={facilityForm.name} onChange={(e) => setFacilityForm({ ...facilityForm, name: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none transition-all" />
+                <h3 className="font-bold mb-4 flex items-center gap-2"><Info className="w-4 h-4 text-primary" /> Información Pública</h3>
+                <div className="space-y-4">
+                    <div>
+                        <label className="text-xs font-semibold text-muted-foreground block mb-1">Nombre del complejo</label>
+                        <input type="text" value={facilityForm.name} onChange={(e) => setFacilityForm({ ...facilityForm, name: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none transition-all" />
+                    </div>
+                    <div>
+                        <label className="text-xs font-semibold text-muted-foreground block mb-1">Descripción corta ("Sobre nosotros")</label>
+                        <textarea value={facilityForm.description} onChange={(e) => setFacilityForm({ ...facilityForm, description: e.target.value })} rows={3} placeholder="Bienvenidos a nuestro club..." className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none transition-all resize-none" />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-xs font-semibold text-muted-foreground block mb-1 flex items-center gap-1"><MapPin className="w-3 h-3" /> Dirección exacta</label>
+                            <input type="text" value={facilityForm.location} onChange={(e) => setFacilityForm({ ...facilityForm, location: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary outline-none" />
+                        </div>
+                        <div>
+                            <label className="text-xs font-semibold text-muted-foreground block mb-1 flex items-center gap-1"><Map className="w-3 h-3" /> Link de Google Maps</label>
+                            <input type="url" placeholder="https://maps.app.goo.gl/..." value={facilityForm.maps_url} onChange={(e) => setFacilityForm({ ...facilityForm, maps_url: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary outline-none" />
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                            <label className="text-xs font-semibold text-muted-foreground block mb-1 flex items-center gap-1"><MessageCircle className="w-3 h-3" /> WhatsApp</label>
+                            <input type="text" value={facilityForm.whatsapp} onChange={(e) => setFacilityForm({ ...facilityForm, whatsapp: e.target.value })} placeholder="5491112345678" className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary outline-none" />
+                        </div>
+                        <div>
+                            <label className="text-xs font-semibold text-muted-foreground block mb-1 flex items-center gap-1"><Instagram className="w-3 h-3" /> Instagram</label>
+                            <input type="text" placeholder="@tu_club" value={facilityForm.instagram_url} onChange={(e) => setFacilityForm({ ...facilityForm, instagram_url: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary outline-none" />
+                        </div>
+                        <div>
+                            <label className="text-xs font-semibold text-muted-foreground block mb-1 flex items-center gap-1"><Phone className="w-3 h-3" /> Teléfono Fijo</label>
+                            <input type="tel" value={facilityForm.phone} onChange={(e) => setFacilityForm({ ...facilityForm, phone: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary outline-none" />
+                        </div>
+                    </div>
                 </div>
-                
-                <div>
-                <label className="text-xs font-semibold text-muted-foreground block mb-1">Descripción corta ("Sobre nosotros")</label>
-                <textarea value={facilityForm.description} onChange={(e) => setFacilityForm({ ...facilityForm, description: e.target.value })} rows={3} placeholder="Bienvenidos a nuestro club..."
-                    className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none transition-all resize-none" />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                    <label className="text-xs font-semibold text-muted-foreground block mb-1 flex items-center gap-1"><MapPin className="w-3 h-3" /> Dirección exacta</label>
-                    <input type="text" value={facilityForm.location} onChange={(e) => setFacilityForm({ ...facilityForm, location: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary outline-none" />
-                </div>
-                <div>
-                    <label className="text-xs font-semibold text-muted-foreground block mb-1 flex items-center gap-1"><Map className="w-3 h-3" /> Link de Google Maps</label>
-                    <input type="url" placeholder="https://maps.app.goo.gl/..." value={facilityForm.maps_url} onChange={(e) => setFacilityForm({ ...facilityForm, maps_url: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary outline-none" />
-                </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                    <label className="text-xs font-semibold text-muted-foreground block mb-1 flex items-center gap-1"><MessageCircle className="w-3 h-3" /> WhatsApp</label>
-                    <input type="text" value={facilityForm.whatsapp} onChange={(e) => setFacilityForm({ ...facilityForm, whatsapp: e.target.value })} placeholder="5491112345678"
-                    className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary outline-none" />
-                </div>
-                <div>
-                    <label className="text-xs font-semibold text-muted-foreground block mb-1 flex items-center gap-1"><Instagram className="w-3 h-3" /> Instagram</label>
-                    <input type="text" placeholder="@tu_club" value={facilityForm.instagram_url} onChange={(e) => setFacilityForm({ ...facilityForm, instagram_url: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary outline-none" />
-                </div>
-                <div>
-                    <label className="text-xs font-semibold text-muted-foreground block mb-1 flex items-center gap-1"><Phone className="w-3 h-3" /> Teléfono Fijo</label>
-                    <input type="tel" value={facilityForm.phone} onChange={(e) => setFacilityForm({ ...facilityForm, phone: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary outline-none" />
-                </div>
-                </div>
-            </div>
             </div>
         </div>
 
         {/* COLUMNA DERECHA (5 de 12 espacios) */}
         <div className="lg:col-span-5 space-y-6">
             
-            {/* Amenities (Servicios) */}
             <div className="glass-card rounded-2xl p-6">
                 <h3 className="font-bold mb-2 flex items-center gap-2"><Star className="w-4 h-4 text-primary" /> Servicios del Predio</h3>
-                <p className="text-xs text-muted-foreground mb-4">Seleccioná los servicios de tu complejo o agregá nuevos.</p>
-                
+                <p className="text-xs text-muted-foreground mb-4">Seleccioná los servicios de tu complejo.</p>
                 <div className="flex flex-wrap gap-2 mb-4">
                     {allAmenities.map(amenity => {
                         const isSelected = facilityForm.amenities.includes(amenity);
@@ -278,64 +262,107 @@ const AdminSettings = () => {
                         )
                     })}
                 </div>
-
-                {/* NUEVO: Agregar servicio personalizado */}
                 <form onSubmit={handleAddCustomAmenity} className="flex gap-2 border-t border-border/50 pt-4">
-                    <input 
-                        type="text" 
-                        value={customAmenity} 
-                        onChange={e => setCustomAmenity(e.target.value)} 
-                        placeholder="Ej: Kiosco, Mesas..." 
-                        className="flex-1 px-3 py-2 rounded-xl border border-input bg-background/50 text-xs focus:border-primary outline-none transition-all" 
-                    />
-                    <button 
-                        type="submit" 
-                        disabled={!customAmenity.trim()} 
-                        className="bg-secondary text-secondary-foreground px-3 py-2 rounded-xl text-xs font-bold hover:opacity-90 disabled:opacity-50 flex items-center gap-1 transition-opacity">
+                    <input type="text" value={customAmenity} onChange={e => setCustomAmenity(e.target.value)} placeholder="Ej: Kiosco, Mesas..." className="flex-1 px-3 py-2 rounded-xl border border-input bg-background/50 text-xs focus:border-primary outline-none transition-all" />
+                    <button type="submit" disabled={!customAmenity.trim()} className="bg-secondary text-secondary-foreground px-3 py-2 rounded-xl text-xs font-bold hover:opacity-90 disabled:opacity-50 flex items-center gap-1 transition-opacity">
                         <Plus className="w-3.5 h-3.5"/> Agregar
                     </button>
                 </form>
             </div>
 
-            {/* Schedules (Horarios) */}
+            {/* HORARIOS REDISEÑADOS CON SELECT MODERNO */}
             <div className="glass-card rounded-2xl p-6 relative">
-            <div className="flex justify-between items-start mb-4">
-                <div>
-                    <h3 className="font-bold mb-1 flex items-center gap-2"><Clock className="w-4 h-4 text-primary" /> Horarios de Apertura</h3>
-                    <p className="text-xs text-muted-foreground">Configurá la apertura y cierre.</p>
-                </div>
-                <button onClick={handleSaveSchedules} disabled={upsertSchedule.isPending}
-                    className="flex items-center gap-1.5 bg-secondary text-secondary-foreground px-3 py-1.5 rounded-lg font-bold text-[11px] hover:opacity-90 transition-opacity disabled:opacity-50 shrink-0">
-                    <Save className="w-3.5 h-3.5" /> Guardar
-                </button>
-            </div>
-            
-            <div className="space-y-1 mt-4 border border-border rounded-xl overflow-hidden bg-background/20">
-                {DAYS.map((day, idx) => {
-                const sched = localSchedules.find((s) => s.day_of_week === idx);
-                if (!sched) return null;
-                return (
-                    <div key={idx} className={cn("flex items-center gap-2 p-2 border-b border-border last:border-0 transition-colors", sched.is_open ? "bg-transparent" : "bg-muted/30 opacity-60")}>
-                    <button onClick={() => updateDay(idx, "is_open", !sched.is_open)}
-                        className={cn("w-10 h-5 rounded-full transition-colors relative shrink-0 border-2 border-transparent", sched.is_open ? "bg-primary" : "bg-muted-foreground/30")}>
-                        <div className={cn("absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform", sched.is_open ? "left-[18px]" : "left-0.5")} />
-                    </button>
-                    <span className="font-bold text-[11px] w-16 shrink-0 truncate">{day}</span>
-                    {sched.is_open ? (
-                        <div className="flex items-center gap-1 flex-1 justify-end">
-                        <input type="time" value={sched.open_time} onChange={(e) => updateDay(idx, "open_time", e.target.value)}
-                            className="border border-border rounded-md px-1.5 py-1 text-[11px] font-medium bg-background outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 w-20 text-center" />
-                        <span className="text-[10px] font-semibold text-muted-foreground">a</span>
-                        <input type="time" value={sched.close_time} onChange={(e) => updateDay(idx, "close_time", e.target.value)}
-                            className="border border-border rounded-md px-1.5 py-1 text-[11px] font-medium bg-background outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 w-20 text-center" />
-                        </div>
-                    ) : (
-                        <span className="text-[11px] font-medium text-muted-foreground italic flex-1 text-right pr-2">Cerrado</span>
-                    )}
+                <div className="flex justify-between items-start mb-4">
+                    <div>
+                        <h3 className="font-bold mb-1 flex items-center gap-2"><Clock className="w-4 h-4 text-primary" /> Horarios de Apertura</h3>
+                        <p className="text-xs text-muted-foreground">Configurá la apertura y cierre.</p>
                     </div>
-                );
-                })}
+                    <button onClick={handleSaveSchedules} disabled={upsertSchedule.isPending}
+                        className="flex items-center gap-1.5 bg-secondary text-secondary-foreground px-3 py-1.5 rounded-lg font-bold text-[11px] hover:opacity-90 transition-opacity disabled:opacity-50 shrink-0">
+                        <Save className="w-3.5 h-3.5" /> Guardar
+                    </button>
+                </div>
+                
+                <div className="space-y-1 mt-4 border border-border rounded-xl overflow-hidden bg-background/20">
+                    {DAYS.map((day, idx) => {
+                    const sched = localSchedules.find((s) => s.day_of_week === idx);
+                    if (!sched) return null;
+                    return (
+                        <div key={idx} className={cn("flex items-center gap-2 p-2 border-b border-border last:border-0 transition-colors", sched.is_open ? "bg-transparent" : "bg-muted/30 opacity-60")}>
+                            <button onClick={() => updateDay(idx, "is_open", !sched.is_open)}
+                                className={cn("w-10 h-5 rounded-full transition-colors relative shrink-0 border-2 border-transparent", sched.is_open ? "bg-primary" : "bg-muted-foreground/30")}>
+                                <div className={cn("absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform", sched.is_open ? "left-[18px]" : "left-0.5")} />
+                            </button>
+                            <span className="font-bold text-[11px] w-16 shrink-0 truncate">{day}</span>
+                            
+                            {sched.is_open ? (
+                                <div className="flex items-center gap-2 flex-1 justify-end">
+                                    <Select value={sched.open_time} onValueChange={(val) => updateDay(idx, "open_time", val)}>
+                                        <SelectTrigger className="h-8 w-[100px] text-xs font-bold bg-background">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent className="max-h-[220px]">
+                                            {TIME_OPTIONS.map(time => <SelectItem key={`open-${time}`} value={time} className="text-xs font-bold">{time} hs</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                    
+                                    <span className="text-[10px] font-semibold text-muted-foreground">a</span>
+                                    
+                                    <Select value={sched.close_time} onValueChange={(val) => updateDay(idx, "close_time", val)}>
+                                        <SelectTrigger className="h-8 w-[100px] text-xs font-bold bg-background">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent className="max-h-[220px]">
+                                            {TIME_OPTIONS.map(time => <SelectItem key={`close-${time}`} value={time} className="text-xs font-bold">{time} hs</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            ) : (
+                                <span className="text-[11px] font-medium text-muted-foreground italic flex-1 text-right pr-2">Cerrado</span>
+                            )}
+                        </div>
+                    );
+                    })}
+                </div>
             </div>
+
+            <div className="glass-card rounded-2xl p-6 relative border-t-4 border-t-primary shadow-lg bg-primary/5">
+                <h3 className="font-bold mb-1 flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-primary" /> Política de Reservas</h3>
+                <p className="text-xs text-muted-foreground mb-5">Protegé tus horarios exigiendo una seña online obligatoria.</p>
+
+                <div className="bg-card border border-border rounded-xl p-4 space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="font-bold text-sm">Cobrar seña online</p>
+                            <p className="text-[10px] text-muted-foreground">Requerir pago parcial en la app para confirmar turno.</p>
+                        </div>
+                        <button onClick={() => setFacilityForm(prev => ({...prev, requires_deposit: !prev.requires_deposit}))}
+                            className={cn("w-12 h-6 rounded-full transition-colors relative shrink-0 border-2 border-transparent", facilityForm.requires_deposit ? "bg-primary" : "bg-muted-foreground/30")}>
+                            <div className={cn("absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform", facilityForm.requires_deposit ? "left-[24px]" : "left-0.5")} />
+                        </button>
+                    </div>
+
+                    {facilityForm.requires_deposit && (
+                        <div className="pt-4 border-t border-border/50 animate-in fade-in slide-in-from-top-2 duration-300">
+                            <label className="text-xs font-bold text-muted-foreground mb-2 flex items-center gap-1"><Percent className="w-3 h-3"/> Porcentaje de Seña</label>
+                            
+                            {/* También convertimos este a Select de Radix para mantener la estética */}
+                            <Select value={facilityForm.deposit_percentage.toString()} onValueChange={(val) => setFacilityForm(prev => ({...prev, deposit_percentage: Number(val)}))}>
+                                <SelectTrigger className="w-full h-12 border-2 border-primary/20 rounded-xl px-4 text-sm font-bold bg-background text-primary">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="10" className="font-bold text-xs">10% del valor de la cancha</SelectItem>
+                                    <SelectItem value="20" className="font-bold text-xs">20% del valor de la cancha</SelectItem>
+                                    <SelectItem value="30" className="font-bold text-xs">30% del valor de la cancha</SelectItem>
+                                    <SelectItem value="40" className="font-bold text-xs">40% del valor de la cancha</SelectItem>
+                                    <SelectItem value="50" className="font-bold text-xs">50% (Mitad de la cancha)</SelectItem>
+                                    <SelectItem value="100" className="font-bold text-xs">100% (Pago completo)</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
+                </div>
             </div>
             
         </div>

@@ -372,17 +372,27 @@ export function useExpensesRange(startDate?: string, endDate?: string) {
     enabled: !!startDate && !!endDate && !!facilityId,
   });
 }
-
+// --- Expenses ---
 export function useCreateExpense() {
   const facilityId = useFacilityId();
   const qc = useQueryClient();
-  return useMutation({ mutationFn: async (expense: { category: string; description?: string; amount: number; expense_date: string }) => { if (!facilityId) throw new Error("No facility"); const { error } = await supabase.from("expenses").insert({ ...expense, facility_id: facilityId }); if (error) throw error; }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["expenses"] }); qc.invalidateQueries({ queryKey: ["expenses-range"] }); } });
+  return useMutation({ 
+    mutationFn: async (expense: { category: string; description?: string; amount: number; expense_date: string; payment_method: string }) => { 
+        if (!facilityId) throw new Error("No facility"); 
+        const { error } = await supabase.from("expenses").insert({ ...expense, facility_id: facilityId }); 
+        if (error) throw error; 
+    }, 
+    onSuccess: () => { 
+        qc.invalidateQueries({ queryKey: ["expenses"] }); 
+        qc.invalidateQueries({ queryKey: ["expenses-range"] }); 
+    } 
+  });
 }
 
 export function useUpdateExpense() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...updates }: { id: string; category?: string; description?: string; amount?: number; expense_date?: string }) => {
+    mutationFn: async ({ id, ...updates }: { id: string; category?: string; description?: string; amount?: number; expense_date?: string; payment_method?: string }) => {
       const { error } = await supabase.from("expenses").update(updates as any).eq("id", id);
       if (error) throw error;
     },
@@ -392,10 +402,17 @@ export function useUpdateExpense() {
 
 export function useDeleteExpense() {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: async (id: string) => { const { error } = await supabase.from("expenses").delete().eq("id", id); if (error) throw error; }, onSuccess: () => { qc.invalidateQueries({ queryKey: ["expenses"] }); qc.invalidateQueries({ queryKey: ["expenses-range"] }); } });
+  return useMutation({ 
+      mutationFn: async (id: string) => { 
+          const { error } = await supabase.from("expenses").delete().eq("id", id); 
+          if (error) throw error; 
+      }, 
+      onSuccess: () => { 
+          qc.invalidateQueries({ queryKey: ["expenses"] }); 
+          qc.invalidateQueries({ queryKey: ["expenses-range"] }); 
+      } 
+  });
 }
-
-
 
 // Facility Schedules
 export function useFacilitySchedules() {
@@ -528,14 +545,32 @@ export function useBuffetSalesRange(startDate?: string, endDate?: string) {
 export function useCreateBuffetSale() {
   const facilityId = useFacilityId();
   const qc = useQueryClient();
+  
   return useMutation({
-    mutationFn: async (params: { total: number; items: { product_id: string; product_name: string; quantity: number; unit_price: number }[] }) => {
+    mutationFn: async (params: { 
+        total: number; 
+        items: { product_id: string; product_name: string; quantity: number; unit_price: number }[];
+        payment_method: string; // <-- NUEVO: Recibimos el método de pago
+    }) => {
       if (!facilityId) throw new Error("No facility");
-      const { data: sale, error: saleError } = await supabase.from("buffet_sales").insert({ facility_id: facilityId, total: params.total } as any).select("id").single();
+      
+      // NUEVO: Pasamos el payment_method a la base de datos
+      const { data: sale, error: saleError } = await supabase
+        .from("buffet_sales")
+        .insert({ 
+            facility_id: facilityId, 
+            total: params.total,
+            payment_method: params.payment_method 
+        } as any)
+        .select("id")
+        .single();
+        
       if (saleError) throw saleError;
+      
       const saleItems = params.items.map((item) => ({ sale_id: sale.id, ...item }));
       const { error: itemsError } = await supabase.from("buffet_sale_items").insert(saleItems as any);
       if (itemsError) throw itemsError;
+      
       // Decrease stock for each product
       for (const item of params.items) {
         const { data: product } = await supabase.from("buffet_products").select("stock").eq("id", item.product_id).single();
@@ -543,6 +578,7 @@ export function useCreateBuffetSale() {
           await supabase.from("buffet_products").update({ stock: Math.max(0, product.stock - item.quantity) } as any).eq("id", item.product_id);
         }
       }
+      
       return sale.id;
     },
     onSuccess: () => {
@@ -599,7 +635,7 @@ export function useCreateBuffetPurchase() {
   const queryClient = useQueryClient();
   const facilityId = useFacilityId();
   return useMutation({
-    mutationFn: async (purchase: { product_id: string; quantity: number; unit_price: number; total_price: number }) => {
+    mutationFn: async (purchase: { product_id: string; quantity: number; unit_price: number; total_price: number; payment_method: string }) => {
       if (!facilityId) throw new Error("No facility");
       const { data, error } = await supabase
         .from('buffet_purchases')

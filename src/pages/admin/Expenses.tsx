@@ -4,7 +4,7 @@ import { useExpenses, useCreateExpense, useDeleteExpense, useUpdateExpense, useB
 import { cn } from "@/lib/utils";
 import { format, addDays, addMonths } from "date-fns";
 import { es } from "date-fns/locale";
-import { Plus, Trash2, ChevronLeft, ChevronRight, Calendar, X, Receipt, Download, ArrowLeft, Image as ImageIcon, Pencil, AlertTriangle, AlertCircle } from "lucide-react";
+import { Plus, Trash2, ChevronLeft, ChevronRight, Calendar, X, Receipt, Download, ArrowLeft, Image as ImageIcon, Pencil, AlertTriangle, AlertCircle, Banknote, SmartphoneNfc, CreditCard } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import * as XLSX from 'xlsx';
 
@@ -26,6 +26,24 @@ const EXPENSE_CATEGORIES = [
   { value: "otro", label: "Otro", icon: "📝" },
 ];
 
+const PAYMENT_METHODS = [
+  { value: "efectivo", label: "Efectivo", icon: Banknote, activeClass: "bg-[#00a650]/10 border-[#00a650] text-[#00a650]", hoverClass: "hover:border-[#00a650]/50 hover:bg-[#00a650]/5" },
+  { value: "mercadopago", label: "Mercado Pago", icon: SmartphoneNfc, activeClass: "bg-[#009EE3]/10 border-[#009EE3] text-[#009EE3]", hoverClass: "hover:border-[#009EE3]/50 hover:bg-[#009EE3]/5" },
+  { value: "tarjeta", label: "Tarjeta", icon: CreditCard, activeClass: "bg-purple-500/10 border-purple-500 text-purple-600", hoverClass: "hover:border-purple-500/50 hover:bg-purple-500/5" },
+];
+
+const PaymentBadge = ({ method }: { method?: string }) => {
+    if (!method) return null;
+    const pm = PAYMENT_METHODS.find(p => p.value === method);
+    if (!pm) return null;
+    const Icon = pm.icon;
+    return (
+        <div className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground mt-0.5 justify-end">
+            <Icon className="w-3 h-3" /> {pm.label}
+        </div>
+    );
+};
+
 const AdminExpenses = () => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<"day" | "month">("day");
@@ -35,12 +53,13 @@ const AdminExpenses = () => {
   const [selectedProduct, setSelectedProduct] = useState<any | "new">(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   
-  // NUEVO: Estado para el Popup de Eliminación Custom
   const [deletePrompt, setDeletePrompt] = useState<{id: string, isBuffet: boolean} | null>(null);
   
+  // ACTUALIZADO: Agregamos payment_method al form inicial
   const [form, setForm] = useState({ 
       category: "", description: "", amount: "", expense_date: format(new Date(), "yyyy-MM-dd"), 
-      quantity: "1", newProductName: "", newProductPrice: "", newProductCategory: "Bebidas" 
+      quantity: "1", newProductName: "", newProductPrice: "", newProductCategory: "Bebidas",
+      payment_method: "efectivo"
   });
 
   const dateStr = format(selectedDate, "yyyy-MM-dd");
@@ -67,7 +86,7 @@ const AdminExpenses = () => {
       setEditingId(null);
       setStep("category");
       setSelectedProduct(null);
-      setForm({ category: "", description: "", amount: "", expense_date: dateStr, quantity: "1", newProductName: "", newProductPrice: "", newProductCategory: "Bebidas" });
+      setForm({ category: "", description: "", amount: "", expense_date: dateStr, quantity: "1", newProductName: "", newProductPrice: "", newProductCategory: "Bebidas", payment_method: "efectivo" });
       setShowModal(true);
   };
 
@@ -78,7 +97,8 @@ const AdminExpenses = () => {
           category: expense.category,
           description: expense.description || "",
           amount: expense.amount.toString(),
-          expense_date: expense.expense_date
+          expense_date: expense.expense_date,
+          payment_method: expense.payment_method || "efectivo"
       });
       setStep("details");
       setShowModal(true);
@@ -103,8 +123,8 @@ const AdminExpenses = () => {
       if (editingId) {
           await updateExpense.mutateAsync({
               id: editingId, category: form.category, description: form.description || undefined,
-              amount: Number(form.amount), expense_date: form.expense_date
-          });
+              amount: Number(form.amount), expense_date: form.expense_date, payment_method: form.payment_method
+          } as any);
           toast({ title: "Gasto actualizado ✅" });
       } else {
           if (form.category === "buffet_insumos") {
@@ -115,14 +135,16 @@ const AdminExpenses = () => {
             if (selectedProduct === "new") {
                 if (!form.newProductName || !form.newProductPrice) return toast({ title: "Completá los datos del nuevo producto", variant: "destructive" });
                 const newProd = await createBuffetProduct.mutateAsync({ name: form.newProductName, category: form.newProductCategory, price: Number(form.newProductPrice), stock: 0 });
-                await createBuffetPurchase.mutateAsync({ product_id: newProd.id, quantity: qty, unit_price: unitPrice, total_price: totalAmount });
+                // ACTUALIZADO: Pasamos el payment_method a la compra
+                await createBuffetPurchase.mutateAsync({ product_id: newProd.id, quantity: qty, unit_price: unitPrice, total_price: totalAmount, payment_method: form.payment_method } as any);
                 toast({ title: "Producto creado y compra registrada ✅" });
             } else {
-                await createBuffetPurchase.mutateAsync({ product_id: selectedProduct.id, quantity: qty, unit_price: unitPrice, total_price: totalAmount });
+                await createBuffetPurchase.mutateAsync({ product_id: selectedProduct.id, quantity: qty, unit_price: unitPrice, total_price: totalAmount, payment_method: form.payment_method } as any);
                 toast({ title: "Compra registrada y stock actualizado ✅" });
             }
           } else {
-            await createExpense.mutateAsync({ category: form.category, description: form.description || undefined, amount: Number(form.amount), expense_date: form.expense_date });
+            // ACTUALIZADO: Pasamos el payment_method al gasto normal
+            await createExpense.mutateAsync({ category: form.category, description: form.description || undefined, amount: Number(form.amount), expense_date: form.expense_date, payment_method: form.payment_method } as any);
             toast({ title: "Gasto registrado ✅" });
           }
       }
@@ -132,12 +154,10 @@ const AdminExpenses = () => {
     }
   };
 
-  // NUEVO: Abre el modal de advertencia en lugar del window.confirm
   const handleDeleteClick = (id: string, isBuffet: boolean) => {
       setDeletePrompt({ id, isBuffet });
   };
 
-  // NUEVO: Ejecuta la eliminación real
   const confirmDelete = async () => {
       if (!deletePrompt) return;
       try {
@@ -155,7 +175,9 @@ const AdminExpenses = () => {
       const dataToExport = filteredExpenses.map(e => ({
           Fecha: format(new Date(e.expense_date + "T12:00:00"), "dd/MM/yyyy"),
           Categoría: getCategoryInfo(e.category).label,
-          Descripción: e.description || "-", Monto: e.amount
+          Descripción: e.description || "-", 
+          Monto: e.amount,
+          Metodo_Pago: e.payment_method || "No especificado" // Agregado al Excel
       }));
       const worksheet = XLSX.utils.json_to_sheet(dataToExport);
       const workbook = XLSX.utils.book_new();
@@ -219,10 +241,12 @@ const AdminExpenses = () => {
                   {e.description && <p className="text-xs text-muted-foreground truncate">{e.description}</p>}
                   <p className="text-[10px] font-semibold text-muted-foreground mt-0.5 uppercase tracking-wider">{format(new Date(e.expense_date + "T12:00:00"), "d MMM yyyy", { locale: es })}</p>
                 </div>
-                <p className="font-black text-destructive text-base sm:text-lg shrink-0">${e.amount.toLocaleString()}</p>
-                <div className="flex items-center gap-1 shrink-0 ml-2">
+                <div className="text-right shrink-0">
+                    <p className="font-black text-destructive text-base sm:text-lg">-${e.amount.toLocaleString()}</p>
+                    <PaymentBadge method={e.payment_method} />
+                </div>
+                <div className="flex items-center gap-1 shrink-0 ml-2 border-l border-border/50 pl-2">
                     <button onClick={() => handleEditClick(e)} className="p-2 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"><Pencil className="w-4 h-4" /></button>
-                    {/* Llamamos al nuevo popup en vez de al confirm nativo */}
                     <button onClick={() => handleDeleteClick(e.id, isBuffet)} className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"><Trash2 className="w-4 h-4" /></button>
                 </div>
               </div>
@@ -231,7 +255,6 @@ const AdminExpenses = () => {
         </div>
       )}
 
-      {/* POPUP PERSONALIZADO DE ELIMINACIÓN */}
       {deletePrompt && (
         <div className="fixed inset-0 z-[60] bg-foreground/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setDeletePrompt(null)}>
             <div onClick={(e) => e.stopPropagation()} className="bg-card rounded-3xl p-6 max-w-sm w-full shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
@@ -258,7 +281,6 @@ const AdminExpenses = () => {
         </div>
       )}
 
-      {/* SÚPER MODAL MULTI-PASO DE GASTOS */}
       {showModal && (
         <div className="fixed inset-0 z-50 bg-foreground/40 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6" onClick={() => setShowModal(false)}>
           <div onClick={(e) => e.stopPropagation()} className={cn("bg-card rounded-3xl p-6 w-full shadow-2xl flex flex-col transition-all duration-300 max-h-[90vh]", step === "details" ? "max-w-md" : "max-w-3xl")}>
@@ -329,7 +351,6 @@ const AdminExpenses = () => {
                             </div>
                         </div>
 
-                        {/* EXPLICACIÓN ERP SI INTENTA EDITAR UNA COMPRA */}
                         {editingId && form.category === "buffet_insumos" && (
                             <div className="bg-orange-500/10 border border-orange-500/30 p-4 rounded-xl flex gap-3">
                                 <AlertCircle className="w-5 h-5 text-orange-600 shrink-0 mt-0.5" />
@@ -399,6 +420,21 @@ const AdminExpenses = () => {
                                             editingId && form.category === "buffet_insumos" ? "bg-muted cursor-not-allowed opacity-70" : "bg-background focus:border-destructive")} 
                                         value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="0" />
                                 </div>
+                            </div>
+                        </div>
+
+                        {/* NUEVO: SECCIÓN DE MÉTODO DE PAGO */}
+                        <div className="pt-2 border-t border-border/50">
+                            <label className="text-xs font-bold text-muted-foreground mb-2 block">¿Cómo abonaste este gasto?</label>
+                            <div className="grid grid-cols-3 gap-2">
+                                {PAYMENT_METHODS.map(pm => (
+                                    <button key={pm.value} type="button" onClick={() => setForm({...form, payment_method: pm.value})} 
+                                        className={cn("flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl border text-[10px] sm:text-xs font-bold transition-all", 
+                                        form.payment_method === pm.value ? `${pm.activeClass} shadow-sm scale-105` : `bg-card text-muted-foreground border-border ${pm.hoverClass}`)}>
+                                        <pm.icon className="w-5 h-5" /> 
+                                        <span>{pm.label}</span>
+                                    </button>
+                                ))}
                             </div>
                         </div>
 
