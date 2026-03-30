@@ -81,7 +81,7 @@ const AdminSettings = () => {
   const handleConnectMercadoPago = () => {
     const APP_ID = import.meta.env.VITE_MP_APP_ID;
     // Obligamos a que la redirección sea a la URL real que pusiste en Mercado Pago
-    const REDIRECT_URI = "https://mysportdate.vercel.app/admin/settings";
+    const REDIRECT_URI = "https://mysportdate-test.vercel.app/admin/settings";
     
     if (!APP_ID) {
         toast({ title: "Error", description: "Falta configurar el App ID de Mercado Pago.", variant: "destructive" });
