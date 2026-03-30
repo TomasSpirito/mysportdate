@@ -6,6 +6,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 
+// ASUMIMOS QUE TU CLIENTE DE SUPABASE ESTÁ ACÁ (ajustá la ruta si es distinta en tu proyecto)
+import { supabase } from "@/integrations/supabase/client";
+
 // Extendemos el tipo Facility nativo para incluir las columnas nuevas sin usar 'any'
 type ExtendedFacility = Facility & {
   requires_deposit?: boolean;
@@ -56,26 +59,38 @@ const AdminSettings = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get("code");
 
-    if (code) {
+    if (code && facility?.id) {
       setIsLinkingMP(true);
       // Limpiamos la URL para que no quede el código feo a la vista
       window.history.replaceState({}, document.title, window.location.pathname);
       
-      // Acá iría la llamada a tu Backend (Edge Function) para canjear el código por el Access Token real.
-      // Por ahora simulamos que fue exitoso y guardamos la bandera en la BD.
-      setTimeout(async () => {
+      const linkAccount = async () => {
         try {
-          await updateFacility.mutateAsync({ mp_connected: true } as never);
+          // Llamamos a nuestra nueva Edge Function en el backend
+          const { data, error } = await supabase.functions.invoke('mp-connect', {
+            body: { 
+              code: code, 
+              redirectUri: "https://mysportdate-test.vercel.app/admin/settings",
+              facilityId: facility.id 
+            }
+          });
+
+          if (error || !data?.success) throw new Error("Falló la vinculación en el servidor");
+
+          // Si el servidor tuvo éxito y guardó el token, actualizamos la vista
           setFacilityForm(prev => ({ ...prev, mp_connected: true }));
           toast({ title: "¡Mercado Pago vinculado! ✅", description: "Ya podés recibir pagos automáticos en tu cuenta." });
         } catch (err: unknown) {
-          toast({ title: "Error", description: "No se pudo guardar la vinculación.", variant: "destructive" });
+          console.error("Error al invocar Edge Function:", err);
+          toast({ title: "Error", description: "No se pudo completar la vinculación con Mercado Pago.", variant: "destructive" });
         } finally {
           setIsLinkingMP(false);
         }
-      }, 1500);
+      };
+
+      linkAccount();
     }
-  }, [updateFacility]);
+  }, [facility?.id]);
 
   // ─── LÓGICA DE MERCADO PAGO ───
   // Generamos la URL directamente para usarla en un <a> tag y forzar el Deep Link en celulares
