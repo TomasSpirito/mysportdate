@@ -78,19 +78,10 @@ const AdminSettings = () => {
   }, [updateFacility]);
 
   // ─── LÓGICA DE MERCADO PAGO ───
-  const handleConnectMercadoPago = () => {
-    const APP_ID = import.meta.env.VITE_MP_APP_ID;
-    // Obligamos a que la redirección sea a la URL real que pusiste en Mercado Pago
-    const REDIRECT_URI = "https://mysportdate-test.vercel.app/admin/settings";
-    
-    if (!APP_ID) {
-        toast({ title: "Error", description: "Falta configurar el App ID de Mercado Pago.", variant: "destructive" });
-        return;
-    }
-
-    const authUrl = `https://auth.mercadopago.com/authorization?client_id=${APP_ID}&response_type=code&platform_id=mp&state=link-account&redirect_uri=${REDIRECT_URI}`;
-    window.location.href = authUrl;
-  };
+  // Generamos la URL directamente para usarla en un <a> tag y forzar el Deep Link en celulares
+  const APP_ID = import.meta.env.VITE_MP_APP_ID;
+  const REDIRECT_URI = "https://mysportdate-test.vercel.app/admin/settings";
+  const authUrl = `https://auth.mercadopago.com/authorization?client_id=${APP_ID}&response_type=code&platform_id=mp&state=link-account&redirect_uri=${REDIRECT_URI}`;
 
 
   useEffect(() => {
@@ -249,17 +240,22 @@ const AdminSettings = () => {
                         </button>
                     </div>
                 ) : (
-                    <button 
-                        onClick={handleConnectMercadoPago} 
-                        disabled={isLinkingMP}
-                        className="w-full flex items-center justify-center gap-2 bg-[#009EE3] hover:bg-[#0089C7] text-white px-5 py-3.5 rounded-xl font-black text-sm transition-colors disabled:opacity-70 shadow-md shadow-[#009EE3]/20"
-                    >
-                        {isLinkingMP ? (
-                            "Verificando vinculación..."
-                        ) : (
-                            <>Vincular mi cuenta de Mercado Pago</>
+                    // CAMBIO CLAVE: Usamos un <a> real en lugar de un <button> para que iOS/Android abran la App de MP
+                    <a 
+                        href={APP_ID ? authUrl : "#"}
+                        onClick={(e) => {
+                            if (!APP_ID) {
+                                e.preventDefault();
+                                toast({ title: "Error", description: "Falta configurar el App ID de Mercado Pago.", variant: "destructive" });
+                            }
+                        }}
+                        className={cn(
+                            "w-full flex items-center justify-center gap-2 bg-[#009EE3] hover:bg-[#0089C7] text-white px-5 py-3.5 rounded-xl font-black text-sm transition-colors shadow-md shadow-[#009EE3]/20",
+                            isLinkingMP && "opacity-70 pointer-events-none"
                         )}
-                    </button>
+                    >
+                        {isLinkingMP ? "Verificando vinculación..." : "Vincular mi cuenta de Mercado Pago"}
+                    </a>
                 )}
             </div>
 
