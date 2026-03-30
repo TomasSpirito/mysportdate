@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import * as XLSX from 'xlsx';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
-import { FileText, FileSpreadsheet, Loader2 } from "lucide-react"; // Actualizamos los íconos
+import { FileText, FileSpreadsheet, Loader2 } from "lucide-react"; 
 
 const DAYS_SHORT = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 const HEAT_HOURS = Array.from({ length: 6 }, (_, i) => i + 18);
@@ -32,7 +32,7 @@ const AdminAnalytics = () => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const monthStartStr = format(startOfMonth(selectedDate), "yyyy-MM-dd");
   const monthEndStr = format(endOfMonth(selectedDate), "yyyy-MM-dd");
-  const { toast } = useToast(); // <--- AGREGÁ ESTA LÍNEA
+  const { toast } = useToast(); 
 
   const { data: bookings = [] } = useBookingsRange(monthStartStr, monthEndStr);
   const { data: expenses = [] } = useExpensesRange(monthStartStr, monthEndStr);
@@ -327,28 +327,28 @@ const AdminAnalytics = () => {
       {/* FILA 1: KPIs FINANCIEROS (Oro) */}
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-4">
         <div className="glass-card rounded-2xl p-4 sm:p-5 border-l-4 border-l-info">
-          <p className="text-[10px] font-bold text-muted-foreground mb-1 uppercase tracking-wider">Ocupación</p>
-          <p className="text-2xl sm:text-3xl font-black text-info">{stats.occupancyRate}%</p>
+          <p className="text-[10px] font-bold text-muted-foreground mb-1.5 uppercase tracking-wider leading-relaxed">Ocupación</p>
+          <p className="text-2xl sm:text-3xl font-black text-info leading-relaxed py-0.5">{stats.occupancyRate}%</p>
         </div>
         <div className="glass-card rounded-2xl p-4 sm:p-5 border-l-4 border-l-foreground">
-          <p className="text-[10px] font-bold text-muted-foreground mb-1 uppercase tracking-wider">Reservas</p>
-          <p className="text-2xl sm:text-3xl font-black text-foreground">{stats.totalBookings}</p>
+          <p className="text-[10px] font-bold text-muted-foreground mb-1.5 uppercase tracking-wider leading-relaxed">Reservas</p>
+          <p className="text-2xl sm:text-3xl font-black text-foreground leading-relaxed py-0.5">{stats.totalBookings}</p>
         </div>
         <div className="glass-card rounded-2xl p-4 sm:p-5 border-l-4 border-l-primary">
-          <p className="text-[10px] font-bold text-muted-foreground mb-1 uppercase tracking-wider">Ingr. Canchas</p>
-          <p className="text-2xl sm:text-3xl font-black text-primary truncate" title={`$${stats.totalRevenue.toLocaleString()}`}>${(stats.totalRevenue / 1000).toFixed(0)}k</p>
+          <p className="text-[10px] font-bold text-muted-foreground mb-1.5 uppercase tracking-wider leading-relaxed">Ingr. Canchas</p>
+          <p className="text-2xl sm:text-3xl font-black text-primary leading-relaxed py-0.5" title={`$${stats.totalRevenue.toLocaleString()}`}>${(stats.totalRevenue / 1000).toFixed(0)}k</p>
         </div>
         <div className="glass-card rounded-2xl p-4 sm:p-5 border-l-4 border-l-orange-500">
-          <p className="text-[10px] font-bold text-muted-foreground mb-1 uppercase tracking-wider">Buffet</p>
-          <p className="text-2xl sm:text-3xl font-black text-orange-500 truncate" title={`$${stats.buffetTotal.toLocaleString()}`}>${(stats.buffetTotal / 1000).toFixed(0)}k</p>
+          <p className="text-[10px] font-bold text-muted-foreground mb-1.5 uppercase tracking-wider leading-relaxed">Buffet</p>
+          <p className="text-2xl sm:text-3xl font-black text-orange-500 leading-relaxed py-0.5" title={`$${stats.buffetTotal.toLocaleString()}`}>${(stats.buffetTotal / 1000).toFixed(0)}k</p>
         </div>
         <div className="glass-card rounded-2xl p-4 sm:p-5 border-l-4 border-l-destructive">
-          <p className="text-[10px] font-bold text-muted-foreground mb-1 uppercase tracking-wider">Egresos</p>
-          <p className="text-2xl sm:text-3xl font-black text-destructive truncate" title={`$${stats.totalExpenses.toLocaleString()}`}>-${(stats.totalExpenses / 1000).toFixed(0)}k</p>
+          <p className="text-[10px] font-bold text-muted-foreground mb-1.5 uppercase tracking-wider leading-relaxed">Egresos</p>
+          <p className="text-2xl sm:text-3xl font-black text-destructive leading-relaxed py-0.5" title={`$${stats.totalExpenses.toLocaleString()}`}>-${(stats.totalExpenses / 1000).toFixed(0)}k</p>
         </div>
         <div className={cn("glass-card rounded-2xl p-4 sm:p-5 border-l-4", stats.netProfit >= 0 ? "border-l-[#00a650]" : "border-l-destructive")}>
-          <p className="text-[10px] font-bold text-muted-foreground mb-1 uppercase tracking-wider">Ganancia Neta</p>
-          <p className={cn("text-2xl sm:text-3xl font-black truncate", stats.netProfit >= 0 ? "text-[#00a650]" : "text-destructive")} title={`$${stats.netProfit.toLocaleString()}`}>
+          <p className="text-[10px] font-bold text-muted-foreground mb-1.5 uppercase tracking-wider leading-relaxed">Ganancia Neta</p>
+          <p className={cn("text-2xl sm:text-3xl font-black leading-relaxed py-0.5", stats.netProfit >= 0 ? "text-[#00a650]" : "text-destructive")} title={`$${stats.netProfit.toLocaleString()}`}>
               ${(stats.netProfit / 1000).toFixed(0)}k
           </p>
         </div>
@@ -358,30 +358,30 @@ const AdminAnalytics = () => {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
         <div className="glass-card rounded-2xl p-4 flex items-center gap-4 border border-border/50 shadow-sm">
           <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center shrink-0"><AlertCircle className="w-5 h-5 text-orange-500" /></div>
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold text-muted-foreground uppercase truncate">Deuda en la calle</p>
-            <p className="text-xl font-black text-orange-500 truncate">${stats.pendingPayments.toLocaleString()}</p>
+          <div className="flex-1 overflow-visible">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase leading-relaxed pb-0.5">Deuda en la calle</p>
+            <p className="text-xl font-black text-orange-500 leading-relaxed pt-0.5">${stats.pendingPayments.toLocaleString()}</p>
           </div>
         </div>
         <div className="glass-card rounded-2xl p-4 flex items-center gap-4 border border-border/50 shadow-sm">
           <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0"><Target className="w-5 h-5 text-primary" /></div>
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold text-muted-foreground uppercase truncate">Ticket Promedio</p>
-            <p className="text-xl font-black text-primary truncate">${stats.avgTicket.toLocaleString()}</p>
+          <div className="flex-1 overflow-visible">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase leading-relaxed pb-0.5">Ticket Promedio</p>
+            <p className="text-xl font-black text-primary leading-relaxed pt-0.5">${stats.avgTicket.toLocaleString()}</p>
           </div>
         </div>
         <div className="glass-card rounded-2xl p-4 flex items-center gap-4 border border-border/50 shadow-sm">
           <div className="w-10 h-10 rounded-xl bg-info/10 flex items-center justify-center shrink-0"><Users className="w-5 h-5 text-info" /></div>
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold text-muted-foreground uppercase truncate">Clientes Únicos</p>
-            <p className="text-xl font-black text-info truncate">{stats.totalClients}</p>
+          <div className="flex-1 overflow-visible">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase leading-relaxed pb-0.5">Clientes Únicos</p>
+            <p className="text-xl font-black text-info leading-relaxed pt-0.5">{stats.totalClients}</p>
           </div>
         </div>
         <div className="glass-card rounded-2xl p-4 flex items-center gap-4 border border-border/50 shadow-sm">
           <div className="w-10 h-10 rounded-xl bg-destructive/10 flex items-center justify-center shrink-0"><XCircle className="w-5 h-5 text-destructive" /></div>
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold text-muted-foreground uppercase truncate">Tasa Cancelación</p>
-            <p className="text-xl font-black text-destructive truncate">{stats.cancelRate}%</p>
+          <div className="flex-1 overflow-visible">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase leading-relaxed pb-0.5">Tasa Cancelación</p>
+            <p className="text-xl font-black text-destructive leading-relaxed pt-0.5">{stats.cancelRate}%</p>
           </div>
         </div>
       </div>
@@ -451,13 +451,13 @@ const AdminAnalytics = () => {
                 </ResponsiveContainer>
             </div>
             <div className="mt-auto text-center p-3 bg-muted/50 rounded-xl border border-border/50">
-                <p className="text-xs text-muted-foreground">Ocupación Promedio Mes</p>
-                <p className="text-xl font-black text-primary">{stats.occupancyRate}%</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">Ocupación Promedio Mes</p>
+                <p className="text-xl font-black text-primary leading-relaxed">{stats.occupancyRate}%</p>
             </div>
         </div>
       </div>
 
-      {/* FILA 5: HEATMAP FULL WIDTH (SOLUCIÓN AL ESPACIO BLANCO) */}
+      {/* FILA 5: HEATMAP FULL WIDTH */}
       <div className="glass-card rounded-2xl p-5 sm:p-6 shadow-sm mb-8">
         <h3 className="font-bold text-base mb-6">🔥 Mapa de Calor (Horarios Pico)</h3>
         <div className="overflow-x-auto custom-scrollbar pb-2 pr-1">
@@ -495,10 +495,10 @@ const AdminAnalytics = () => {
         </div>
       </div>
 
-      {/* FILA 6: LOS 5 GRÁFICOS CATEGÓRICOS AGRUPADOS (COFRE DE ORO) */}
+      {/* FILA 6: LOS 5 GRÁFICOS CATEGÓRICOS AGRUPADOS */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
         
-        {/* Origen Reservas (NUEVO LUGAR AGRUPADO) */}
+        {/* Origen Reservas */}
         {stats.originBreakdown.length > 0 && (
           <div className="glass-card rounded-2xl p-5 flex flex-col hover:border-border/80 transition-colors">
             <h3 className="font-bold text-sm mb-4 flex items-center gap-2"><Smartphone className="w-4 h-4 text-primary" /> Origen Reservas</h3>
@@ -515,14 +515,15 @@ const AdminAnalytics = () => {
             <div className="space-y-2.5 mt-auto">
               {stats.originBreakdown.map((pm) => (
                 <div key={pm.name} className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{ backgroundColor: pm.color }} /><span className="font-semibold">{pm.name}</span></div>
-                  <div className="flex gap-2"><span className="font-black text-muted-foreground">{pm.pct}%</span><span className="font-black w-8 text-right">{pm.value}</span></div>
+                  <div className="flex items-center gap-2 pr-2"><div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: pm.color }} /><span className="font-semibold leading-relaxed py-0.5">{pm.name}</span></div>
+                  <div className="flex gap-2 shrink-0 items-center"><span className="font-black text-muted-foreground leading-relaxed">{pm.pct}%</span><span className="font-black w-8 text-right leading-relaxed">{pm.value}</span></div>
                 </div>
               ))}
             </div>
           </div>
         )}
 
+        {/* Medios de Cobro */}
         {stats.paymentBreakdown.length > 0 && (
           <div className="glass-card rounded-2xl p-5 flex flex-col hover:border-border/80 transition-colors shadow-sm">
             <h3 className="font-bold text-sm mb-4 flex items-center gap-2"><Wallet className="w-4 h-4 text-primary" /> Medios de Cobro</h3>
@@ -539,14 +540,15 @@ const AdminAnalytics = () => {
             <div className="space-y-2.5 mt-auto">
               {stats.paymentBreakdown.map((pm) => (
                 <div key={pm.name} className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{ backgroundColor: pm.color }} /><span className="font-semibold">{pm.name}</span></div>
-                  <div className="flex gap-2"><span className="font-black text-muted-foreground">{pm.pct}%</span><span className="font-black w-12 text-right">${(pm.value/1000).toFixed(1)}k</span></div>
+                  <div className="flex items-center gap-2 pr-2"><div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: pm.color }} /><span className="font-semibold leading-relaxed py-0.5">{pm.name}</span></div>
+                  <div className="flex gap-2 shrink-0 items-center"><span className="font-black text-muted-foreground leading-relaxed">{pm.pct}%</span><span className="font-black w-12 text-right leading-relaxed">${(pm.value/1000).toFixed(1)}k</span></div>
                 </div>
               ))}
             </div>
           </div>
         )}
 
+        {/* Egresos */}
         {stats.expenseBreakdown.length > 0 && (
           <div className="glass-card rounded-2xl p-5 flex flex-col hover:border-border/80 transition-colors shadow-sm">
             <h3 className="font-bold text-sm mb-4 flex items-center gap-2"><TrendingDown className="w-4 h-4 text-destructive" /> Top Egresos</h3>
@@ -563,14 +565,15 @@ const AdminAnalytics = () => {
             <div className="space-y-2.5 mt-auto">
               {stats.expenseBreakdown.slice(0, 3).map((e) => (
                 <div key={e.category} className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2 truncate pr-2"><div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: e.color }} /><span className="font-semibold truncate">{e.category}</span></div>
-                  <div className="flex gap-2 shrink-0"><span className="font-black text-muted-foreground">{e.percentage}%</span><span className="font-black w-10 text-right">${(e.value/1000).toFixed(1)}k</span></div>
+                  <div className="flex items-center gap-2 pr-2"><div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: e.color }} /><span className="font-semibold leading-relaxed py-0.5">{e.category}</span></div>
+                  <div className="flex gap-2 shrink-0 items-center"><span className="font-black text-muted-foreground leading-relaxed">{e.percentage}%</span><span className="font-black w-10 text-right leading-relaxed">${(e.value/1000).toFixed(1)}k</span></div>
                 </div>
               ))}
             </div>
           </div>
         )}
 
+        {/* Canchas */}
         {stats.courtBreakdown.length > 0 && (
           <div className="glass-card rounded-2xl p-5 flex flex-col hover:border-border/80 transition-colors shadow-sm">
             <h3 className="font-bold text-sm mb-4">🏟️ Canchas</h3>
@@ -587,14 +590,15 @@ const AdminAnalytics = () => {
             <div className="space-y-2.5 mt-auto">
               {stats.courtBreakdown.slice(0, 3).map((c) => (
                 <div key={c.court} className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2 truncate pr-2"><div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: c.color }} /><span className="font-semibold truncate">{c.court}</span></div>
-                  <div className="flex gap-2 shrink-0"><span className="font-black text-muted-foreground">{c.percentage}%</span><span className="font-black w-8 text-right">{c.value}</span></div>
+                  <div className="flex items-center gap-2 pr-2"><div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: c.color }} /><span className="font-semibold leading-relaxed py-0.5">{c.court}</span></div>
+                  <div className="flex gap-2 shrink-0 items-center"><span className="font-black text-muted-foreground leading-relaxed">{c.percentage}%</span><span className="font-black w-8 text-right leading-relaxed">{c.value}</span></div>
                 </div>
               ))}
             </div>
           </div>
         )}
 
+        {/* Deportes */}
         {stats.sportBreakdown.length > 0 && (
           <div className="glass-card rounded-2xl p-5 flex flex-col hover:border-border/80 transition-colors shadow-sm">
             <h3 className="font-bold text-sm mb-4">⚽ Deportes</h3>
@@ -611,8 +615,8 @@ const AdminAnalytics = () => {
             <div className="space-y-2.5 mt-auto">
               {stats.sportBreakdown.slice(0, 3).map((s) => (
                 <div key={s.sport} className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2 truncate pr-2"><div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: s.color }} /><span className="font-semibold truncate">{s.sport}</span></div>
-                  <div className="flex gap-2 shrink-0"><span className="font-black text-muted-foreground">{s.percentage}%</span><span className="font-black w-8 text-right">{s.value}</span></div>
+                  <div className="flex items-center gap-2 pr-2"><div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: s.color }} /><span className="font-semibold leading-relaxed py-0.5">{s.sport}</span></div>
+                  <div className="flex gap-2 shrink-0 items-center"><span className="font-black text-muted-foreground leading-relaxed">{s.percentage}%</span><span className="font-black w-8 text-right leading-relaxed">{s.value}</span></div>
                 </div>
               ))}
             </div>

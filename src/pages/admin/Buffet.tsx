@@ -15,7 +15,6 @@ import { cn } from "@/lib/utils";
 
 const CATEGORIES = ["Todas", "Bebidas", "Snacks", "Comidas"];
 
-// NUEVO: Array de métodos de pago con colores específicos
 const PAYMENT_METHODS = [
   { value: "efectivo", label: "Efectivo", icon: Banknote, hoverBorder: "hover:border-[#00a650]", hoverBg: "hover:bg-[#00a650]/10", hoverText: "group-hover:text-[#00a650]" },
   { value: "mercadopago", label: "Mercado Pago", icon: SmartphoneNfc, hoverBorder: "hover:border-[#009EE3]", hoverBg: "hover:bg-[#009EE3]/10", hoverText: "group-hover:text-[#009EE3]" },
@@ -31,8 +30,11 @@ function useDebounce<T>(value: T, delay: number): T {
   return debouncedValue;
 }
 
+// Extendemos el tipo original para incluir la propiedad faltante
+type ExtendedProduct = BuffetProduct & { low_stock_limit?: number };
+
 interface CartItem {
-  product: BuffetProduct;
+  product: ExtendedProduct;
   qty: number;
 }
 
@@ -74,7 +76,8 @@ const Buffet = () => {
     try {
       const response = await fetch(`https://api.unsplash.com/search/photos?page=1&query=${encodeURIComponent(query)}&per_page=3&client_id=${accessKey}`);
       const data = await response.json();
-      setImageResults(data.results.map((r: any) => r.urls.small)); 
+      // Especificamos la forma del objeto en lugar de usar "any"
+      setImageResults(data.results.map((r: { urls: { small: string } }) => r.urls.small)); 
     } catch {
       console.error("Error al buscar imagenes en Unsplash");
     } finally {
@@ -109,7 +112,7 @@ const Buffet = () => {
     }
   };
 
-  const addToCart = (product: BuffetProduct) => {
+  const addToCart = (product: ExtendedProduct) => {
     setCart((prev) => {
       const existing = prev.find((i) => i.product.id === product.id);
       if (existing) {
@@ -127,14 +130,13 @@ const Buffet = () => {
   const removeFromCart = (id: string) => setCart((prev) => prev.filter((i) => i.product.id !== id));
   const cartTotal = cart.reduce((sum, i) => sum + i.product.price * i.qty, 0);
 
-  // ACTUALIZADO: handleCharge ahora recibe el método de pago seleccionado
   const handleCharge = async (paymentMethod: string) => {
     try {
       await createSale.mutateAsync({
         total: cartTotal,
         items: cart.map((i) => ({ product_id: i.product.id, product_name: i.product.name, quantity: i.qty, unit_price: i.product.price })),
-        payment_method: paymentMethod // GUARDAMOS EL MÉTODO DE PAGO AQUÍ
-      } as any);
+        payment_method: paymentMethod
+      } as never); // Usamos never para bypass del tipo sin usar any
       setCart([]);
       toast({ title: "Venta registrada ✅" });
     } catch {
@@ -153,7 +155,7 @@ const Buffet = () => {
     setImageResults([]);
   };
 
-  const openModal = (product?: BuffetProduct) => {
+  const openModal = (product?: ExtendedProduct) => {
     if (product) {
         setEditingId(product.id);
         setNewName(product.name);
@@ -161,8 +163,7 @@ const Buffet = () => {
         setNewPrice(product.price.toString());
         setNewStock(product.stock.toString());
         setNewImageUrl(product.image_url || "");
-        // @ts-ignore
-        setNewLowStockLimit((product.low_stock_limit || 10).toString());
+        setNewLowStockLimit((product.low_stock_limit ?? 10).toString());
     } else {
         resetForm();
     }
@@ -182,10 +183,10 @@ const Buffet = () => {
       };
 
       if (editingId) {
-        await updateProduct.mutateAsync({ id: editingId, ...payload });
+        await updateProduct.mutateAsync({ id: editingId, ...payload } as never);
         toast({ title: "Producto actualizado ✅" });
       } else {
-        await createProduct.mutateAsync(payload as any);
+        await createProduct.mutateAsync(payload as never);
         toast({ title: "Producto agregado ✅" });
       }
       setIsDialogOpen(false);
@@ -200,13 +201,6 @@ const Buffet = () => {
     const matchSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
     return matchCategory && matchSearch;
   });
-
-  const getStockStatus = (stock: number, limit: number) => {
-      const safeLimit = limit || 10;
-      if (stock === 0) return "bg-destructive hover:bg-destructive/90 text-destructive-foreground";
-      if (stock <= safeLimit) return "bg-orange-500 hover:bg-orange-600 text-white";
-      return "bg-secondary text-secondary-foreground";
-  };
 
   if (isLoading) {
     return (
@@ -258,10 +252,10 @@ const Buffet = () => {
                   </div>
                 ) : (
                   <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))" }}>
-                    {filteredProducts.map((p) => {
+                    {filteredProducts.map((pBase) => {
+                      const p = pBase as ExtendedProduct;
                       const isOutOfStock = p.stock <= 0;
-                      // @ts-ignore
-                      const limit = p.low_stock_limit || 10;
+                      const limit = p.low_stock_limit ?? 10;
                       const hasLowStock = !isOutOfStock && p.stock <= limit;
 
                       return (
@@ -372,11 +366,11 @@ const Buffet = () => {
 
           {/* ─── Inventory Tab ─── */}
           <TabsContent value="inventory" className="mt-0">
-            <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden border-border">
-              <div className="flex items-center justify-between p-4 border-b border-border bg-muted/20">
+            <div className="rounded-2xl border bg-card text-card-foreground shadow-sm overflow-hidden border-border/60">
+              <div className="flex items-center justify-between p-4 border-b border-border/50 bg-muted/20">
                 <h2 className="font-semibold">Inventario de Productos</h2>
 
-                <Button size="sm" onClick={() => openModal()}>
+                <Button size="sm" onClick={() => openModal()} className="rounded-xl">
                   <Plus className="w-4 h-4 mr-1.5" /> Agregar producto
                 </Button>
 
@@ -384,7 +378,7 @@ const Buffet = () => {
                     setIsDialogOpen(open);
                     if (!open) resetForm();
                 }}>
-                  <DialogContent className="sm:max-w-md">
+                  <DialogContent className="sm:max-w-md rounded-2xl">
                     <DialogHeader>
                       <DialogTitle>{editingId ? "Editar producto" : "Nuevo producto"}</DialogTitle>
                       <DialogDescription className="hidden">Completa los datos del producto del buffet.</DialogDescription>
@@ -393,31 +387,31 @@ const Buffet = () => {
                     <div className="space-y-4 py-2 px-1 scrollbar-thin max-h-[80vh] overflow-y-auto pr-2">
                       <div className="space-y-1">
                         <Label>Nombre del producto</Label>
-                        <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Ej: Agua mineral" />
+                        <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Ej: Agua mineral" className="rounded-xl" />
                       </div>
 
-                      <div className="space-y-2 border border-border rounded-xl p-3 bg-muted/20">
+                      <div className="space-y-2 border border-border/60 rounded-xl p-3 bg-muted/10">
                           <div className="flex items-center gap-2 mb-1.5">
                               <Search className="w-4 h-4 text-muted-foreground" />
                               <Label className="text-xs text-muted-foreground font-medium flex-1 truncate">
-                                  Imagen del producto (Subí una o pica de internet)
+                                  Imagen del producto (Subí una o buscá de internet)
                               </Label>
                               {searchingImages && <Loader2 className="w-3 h-3 animate-spin ml-auto text-primary"/>}
                           </div>
                           
                           <div className="grid grid-cols-2 gap-2 mb-1">
                               <button onClick={() => fileInputRef.current?.click()} disabled={uploadingImage}
-                                  className={cn("aspect-square rounded-lg border-2 border-dashed border-border overflow-hidden transition-all flex flex-col items-center justify-center bg-card text-center text-xs text-muted-foreground p-3 hover:border-primary hover:bg-muted/30 group",
-                                      newImageUrl && newImageUrl.includes('supabase') && "border-primary shadow-lg border-solid"
+                                  className={cn("aspect-square rounded-xl border-2 border-dashed border-border overflow-hidden transition-all flex flex-col items-center justify-center bg-card text-center text-xs text-muted-foreground p-3 hover:border-primary hover:bg-primary/5 group",
+                                      newImageUrl && newImageUrl.includes('supabase') && "border-primary shadow-sm border-solid"
                                   )}>
                                   {uploadingImage ? (<Loader2 className="w-6 h-6 animate-spin text-primary"/>) : (
                                       <>
                                           {newImageUrl && newImageUrl.includes('supabase') ? (
-                                              <img src={newImageUrl} alt="Propia" className="w-full h-full object-cover rounded" loading="lazy" />
+                                              <img src={newImageUrl} alt="Propia" className="w-full h-full object-cover" loading="lazy" />
                                           ) : (
                                               <>
-                                                  <Upload className="w-6 h-6 mb-1 text-muted-foreground group-hover:text-primary"/>
-                                                  <span>Subir propia</span>
+                                                  <Upload className="w-5 h-5 mb-1.5 text-muted-foreground/60 group-hover:text-primary transition-colors"/>
+                                                  <span className="font-medium">Subir propia</span>
                                               </>
                                           )}
                                       </>
@@ -425,21 +419,21 @@ const Buffet = () => {
                               </button>
                               
                               {imageResults.length === 0 && !searchingImages && !newName ? (
-                                  <div className="aspect-square text-center py-3 border-2 border-dashed border-border rounded-lg bg-card flex flex-col items-center justify-center text-muted-foreground">
-                                      <ImageIcon className="w-5 h-5 mx-auto text-muted-foreground/30 mb-1" />
-                                      <p className="text-[10px] px-2 leading-tight">Escribí el nombre para ver fotos de internet</p>
+                                  <div className="aspect-square text-center py-3 border-2 border-dashed border-border/50 rounded-xl bg-card flex flex-col items-center justify-center text-muted-foreground">
+                                      <ImageIcon className="w-5 h-5 mx-auto text-muted-foreground/30 mb-1.5" />
+                                      <p className="text-[10px] px-3 leading-tight font-medium">Escribí el nombre para ver fotos</p>
                                   </div>
                               ) : (
                                   <div className="grid grid-cols-2 gap-1.5 h-full">
                                     {imageResults.map((url) => (
                                         <button key={url} onClick={() => { if (!uploadingImage) setNewImageUrl(url); }}
-                                            className={cn("aspect-square rounded-lg border-2 overflow-hidden transition-all", newImageUrl === url ? "border-primary shadow-lg scale-105" : "border-border hover:border-primary/50" )}>
+                                            className={cn("aspect-square rounded-lg border-2 overflow-hidden transition-all", newImageUrl === url ? "border-primary shadow-md scale-105" : "border-border/50 hover:border-primary/50" )}>
                                             <img src={url} alt="Internet" className="w-full h-full object-cover" loading="lazy" />
                                         </button>
                                     ))}
                                     {newName.length >= 3 && imageResults.length === 0 && !searchingImages && (
-                                        <button onClick={() => searchImages(newName)} className="aspect-square flex flex-col items-center justify-center border border-border bg-card rounded-lg text-muted-foreground text-center text-[10px] hover:bg-muted transition-colors">
-                                            <RefreshCcw className="w-4 h-4 mb-0.5" /> Reintentar fotos
+                                        <button onClick={() => searchImages(newName)} className="aspect-square flex flex-col items-center justify-center border border-border bg-muted/30 rounded-lg text-muted-foreground text-center text-[10px] hover:bg-muted transition-colors font-medium">
+                                            <RefreshCcw className="w-4 h-4 mb-1 text-muted-foreground/60" /> Reintentar
                                         </button>
                                     )}
                                   </div>
@@ -450,8 +444,8 @@ const Buffet = () => {
                       <div className="space-y-1">
                         <Label>Categoría</Label>
                         <Select value={newCategory} onValueChange={setNewCategory}>
-                          <SelectTrigger><SelectValue placeholder="Bebidas" /></SelectTrigger>
-                          <SelectContent>
+                          <SelectTrigger className="rounded-xl"><SelectValue placeholder="Bebidas" /></SelectTrigger>
+                          <SelectContent className="rounded-xl">
                             {CATEGORIES.filter((c) => c !== "Todas").map((c) => (
                               <SelectItem key={c} value={c}>{c}</SelectItem>
                             ))}
@@ -461,26 +455,26 @@ const Buffet = () => {
                       <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1">
                           <Label>Precio ($)</Label>
-                          <Input type="number" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} placeholder="0" />
+                          <Input type="number" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} placeholder="0" className="rounded-xl" />
                         </div>
                         <div className="space-y-1">
                           <Label>Stock actual</Label>
-                          <Input type="number" value={newStock} onChange={(e) => setNewStock(e.target.value)} placeholder="0" />
+                          <Input type="number" value={newStock} onChange={(e) => setNewStock(e.target.value)} placeholder="0" className="rounded-xl" />
                         </div>
                       </div>
                       
-                      <div className="space-y-1 p-3 rounded-lg border border-orange-500/30 bg-orange-500/5">
-                          <Label className="text-orange-700 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5"/> Alerta de poco stock</Label>
-                          <Input type="number" value={newLowStockLimit} onChange={(e) => setNewLowStockLimit(e.target.value)} placeholder="Ej: 10" className="border-orange-500/30 focus-visible:ring-orange-500" />
-                          <p className="text-[10px] text-muted-foreground">Avisar cuando queden esta cantidad o menos.</p>
+                      <div className="space-y-1.5 p-3.5 rounded-xl border border-orange-500/20 bg-orange-500/5">
+                          <Label className="text-orange-700 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4"/> Alerta de poco stock</Label>
+                          <Input type="number" value={newLowStockLimit} onChange={(e) => setNewLowStockLimit(e.target.value)} placeholder="Ej: 10" className="border-orange-500/20 focus-visible:ring-orange-500 bg-white rounded-lg" />
+                          <p className="text-[10px] text-orange-700/70 font-medium">Avisar cuando quede esta cantidad o menos.</p>
                       </div>
                     </div>
                     
                     <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
 
                     <DialogFooter className="mt-2">
-                        <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-                        <Button onClick={handleSaveProduct} disabled={createProduct.isPending || updateProduct.isPending || searchingImages || uploadingImage}>
+                        <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="rounded-xl">Cancelar</Button>
+                        <Button onClick={handleSaveProduct} disabled={createProduct.isPending || updateProduct.isPending || searchingImages || uploadingImage} className="rounded-xl">
                             {(createProduct.isPending || updateProduct.isPending) && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
                             {editingId ? "Actualizar" : "Guardar"}
                         </Button>
@@ -490,56 +484,87 @@ const Buffet = () => {
               </div>
 
               {filteredProducts.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground text-sm">No se encontraron productos en el inventario.</div>
+                <div className="text-center py-16 text-muted-foreground flex flex-col items-center">
+                    <Package className="w-10 h-10 mb-3 text-muted-foreground/30" />
+                    <p className="font-medium text-foreground">No hay productos</p>
+                    <p className="text-sm">Agregá tu primer producto al inventario.</p>
+                </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/10">
-                      <TableHead>Producto</TableHead>
-                      <TableHead>Categoría</TableHead>
-                      <TableHead className="text-right">Precio</TableHead>
-                      <TableHead className="text-right">Stock</TableHead>
-                      <TableHead className="text-right">Acciones</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredProducts.map((p) => {
-                      // @ts-ignore
-                      const stockClass = getStockStatus(p.stock, p.low_stock_limit);
-                      return (
-                          <TableRow key={p.id}>
-                          <TableCell className="font-medium flex items-center gap-2">
-                              <div className="w-8 h-8 rounded bg-muted flex items-center justify-center overflow-hidden border border-border shrunk-0">
-                                  {p.image_url ? (
-                                      <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" loading="lazy" />
-                                  ) : (
-                                      <Package className="w-4 h-4 text-muted-foreground/40" />
-                                  )}
-                              </div>
-                              <p>{p.name}</p>
-                          </TableCell>
-                          <TableCell>
-                              <Badge variant="outline" className="text-xs h-5 px-1.5">{p.category}</Badge>
-                          </TableCell>
-                          <TableCell className="text-right font-semibold text-primary">${p.price.toLocaleString()}</TableCell>
-                          <TableCell className="text-right">
-                              <Badge className={cn("text-[11px] h-5 px-1.5 border-0", stockClass)}>
-                              {p.stock} un.
-                              </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                              <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground rounded-full hover:bg-primary/10 hover:text-primary mr-1" onClick={() => openModal(p)}>
-                              <Pencil className="w-3.5 h-3.5" />
-                              </Button>
-                              <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive rounded-full hover:bg-destructive/10" onClick={() => deleteProduct.mutate(p.id)}>
-                              <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
-                          </TableCell>
-                          </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
+                <div className="overflow-x-auto">
+                  <Table className="w-full text-sm text-left">
+                    <TableHeader>
+                      <TableRow className="bg-muted/10 border-b border-border/50">
+                        <TableHead className="h-11">Producto</TableHead>
+                        <TableHead className="h-11">Categoría</TableHead>
+                        <TableHead className="text-right h-11">Precio</TableHead>
+                        {/* ALineación centrada obligatoria para línea recta perfecta */}
+                        <TableHead className="text-center h-11 w-24">Stock</TableHead> 
+                        <TableHead className="text-right h-11">Acciones</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody className="divide-y divide-border/50">
+                      {filteredProducts.map((pBase) => {
+                        const p = pBase as ExtendedProduct;
+                        // Lógica de colores suaves y legibles para el stock
+                        const isOutOfStock = p.stock === 0;
+                        const isLowStock = p.stock <= (p.low_stock_limit ?? 10);
+
+                        return (
+                            <TableRow key={p.id} className="hover:bg-muted/30 transition-colors group">
+                            
+                            {/* Producto */}
+                            <TableCell className="font-medium flex items-center gap-3 py-3 whitespace-nowrap">
+                                <div className="w-9 h-9 rounded-lg bg-muted/50 flex items-center justify-center overflow-hidden border border-border/60 shrink-0">
+                                    {p.image_url ? (
+                                        <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" loading="lazy" />
+                                    ) : (
+                                        <Package className="w-4 h-4 text-muted-foreground/40" />
+                                    )}
+                                </div>
+                                <p className="text-sm font-bold text-foreground capitalize">{p.name}</p>
+                            </TableCell>
+
+                            {/* Categoría */}
+                            <TableCell className="py-3 whitespace-nowrap">
+                                <span className="inline-flex px-2 py-1 rounded-md bg-muted/50 text-muted-foreground text-[11px] font-semibold border border-border/50">
+                                    {p.category}
+                                </span>
+                            </TableCell>
+
+                            {/* Precio */}
+                            <TableCell className="text-right font-black text-primary py-3 whitespace-nowrap">
+                                ${p.price.toLocaleString()}
+                            </TableCell>
+
+                            {/* Stock */}
+                            <TableCell className="text-center py-3 whitespace-nowrap">
+                                <span className={cn(
+                                    "inline-flex items-center justify-center min-w-[2.5rem] h-6 px-2 rounded-md text-[11px] font-black border transition-colors",
+                                    isOutOfStock ? "bg-red-100 text-red-700 border-red-200" :
+                                    isLowStock ? "bg-orange-100 text-orange-700 border-orange-200" :
+                                    "bg-slate-100 text-slate-700 border-slate-200"
+                                )}>
+                                    {p.stock}
+                                </span>
+                            </TableCell>
+
+                            {/* Acciones */}
+                            <TableCell className="text-right py-3 whitespace-nowrap">
+                                <div className="flex items-center justify-end gap-1">
+                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => openModal(p)}>
+                                        <Pencil className="w-4 h-4" />
+                                    </Button>
+                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground/70 rounded-lg hover:bg-destructive/10 hover:text-destructive transition-colors" onClick={() => deleteProduct.mutate(p.id)}>
+                                        <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                </div>
+                            </TableCell>
+                            </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
               )}
             </div>
           </TabsContent>
