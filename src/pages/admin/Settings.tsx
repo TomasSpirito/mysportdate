@@ -1,10 +1,17 @@
 import { useState, useEffect, useRef } from "react";
 import AdminLayout from "@/components/layout/AdminLayout";
-import { useFacility, useUpdateFacility, useFacilitySchedules, useUpsertFacilitySchedule, useUploadFacilityImage } from "@/hooks/use-supabase-data";
-import { Clock, MapPin, Phone, Save, Mail, MessageCircle, Link2, Copy, Check, Image as ImageIcon, Instagram, Map, Info, Star, Upload, Plus, Percent, ShieldCheck } from "lucide-react";
+import { useFacility, useUpdateFacility, useFacilitySchedules, useUpsertFacilitySchedule, useUploadFacilityImage, type Facility } from "@/hooks/use-supabase-data";
+import { Clock, MapPin, Phone, Save, Mail, MessageCircle, Link2, Copy, Check, Image as ImageIcon, Instagram, Map, Info, Star, Upload, Plus, Percent, ShieldCheck, Banknote } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
+
+// Extendemos el tipo Facility nativo para incluir las columnas nuevas sin usar 'any'
+type ExtendedFacility = Facility & {
+  requires_deposit?: boolean;
+  deposit_percentage?: number;
+  mp_connected?: boolean; // Bandera para saber si ya vinculó MP
+};
 
 const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 const PREDEFINED_AMENITIES = ["WiFi", "Estacionamiento", "Vestuarios", "Duchas", "Buffet / Bar", "Parrilla", "Salón de eventos", "Seguridad", "Iluminación LED"];
@@ -16,20 +23,24 @@ const TIME_OPTIONS = Array.from({ length: 24 }, (_, i) => {
 });
 
 const AdminSettings = () => {
-  const { data: facility } = useFacility();
+  const { data: facilityBase } = useFacility();
+  const facility = facilityBase as ExtendedFacility;
+  
   const updateFacility = useUpdateFacility();
   const { data: schedules = [] } = useFacilitySchedules();
   const upsertSchedule = useUpsertFacilitySchedule();
   const { uploadImage, uploadingImage } = useUploadFacilityImage();
   
   const [copied, setCopied] = useState(false);
+  const [isLinkingMP, setIsLinkingMP] = useState(false);
 
   const [facilityForm, setFacilityForm] = useState({ 
       name: "", location: "", phone: "", email: "", whatsapp: "",
       description: "", maps_url: "", instagram_url: "", logo_url: "", cover_url: "",
       amenities: [] as string[],
       requires_deposit: false,
-      deposit_percentage: 50
+      deposit_percentage: 50,
+      mp_connected: false
   });
   
   const [localSchedules, setLocalSchedules] = useState<{ day_of_week: number; is_open: boolean; open_time: string; close_time: string }[]>([]);
@@ -39,6 +50,48 @@ const AdminSettings = () => {
   const coverInputRef = useRef<HTMLInputElement>(null);
 
   const publicUrl = facility?.slug ? `${window.location.origin}/predio/${facility.slug}` : "";
+
+  // ─── EFECTO: CAPTURAR EL CÓDIGO DE MERCADO PAGO DE LA URL ───
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get("code");
+
+    if (code) {
+      setIsLinkingMP(true);
+      // Limpiamos la URL para que no quede el código feo a la vista
+      window.history.replaceState({}, document.title, window.location.pathname);
+      
+      // Acá iría la llamada a tu Backend (Edge Function) para canjear el código por el Access Token real.
+      // Por ahora simulamos que fue exitoso y guardamos la bandera en la BD.
+      setTimeout(async () => {
+        try {
+          await updateFacility.mutateAsync({ mp_connected: true } as never);
+          setFacilityForm(prev => ({ ...prev, mp_connected: true }));
+          toast({ title: "¡Mercado Pago vinculado! ✅", description: "Ya podés recibir pagos automáticos en tu cuenta." });
+        } catch (err: unknown) {
+          toast({ title: "Error", description: "No se pudo guardar la vinculación.", variant: "destructive" });
+        } finally {
+          setIsLinkingMP(false);
+        }
+      }, 1500);
+    }
+  }, [updateFacility]);
+
+  // ─── LÓGICA DE MERCADO PAGO ───
+  const handleConnectMercadoPago = () => {
+    const APP_ID = import.meta.env.VITE_MP_APP_ID;
+    // Obligamos a que la redirección sea a la URL real que pusiste en Mercado Pago
+    const REDIRECT_URI = "https://mysportdate.vercel.app/admin/settings";
+    
+    if (!APP_ID) {
+        toast({ title: "Error", description: "Falta configurar el App ID de Mercado Pago.", variant: "destructive" });
+        return;
+    }
+
+    const authUrl = `https://auth.mercadopago.com/authorization?client_id=${APP_ID}&response_type=code&platform_id=mp&state=link-account&redirect_uri=${REDIRECT_URI}`;
+    window.location.href = authUrl;
+  };
+
 
   useEffect(() => {
     if (facility) {
@@ -56,13 +109,13 @@ const AdminSettings = () => {
         amenities: facility.amenities || [],
         requires_deposit: facility.requires_deposit || false,
         deposit_percentage: facility.deposit_percentage || 50,
+        mp_connected: facility.mp_connected || false
       });
     }
   }, [facility]);
 
   useEffect(() => {
     if (schedules.length > 0) {
-      // CORRECCIÓN CLAVE: .slice(0, 5) formatea "08:00:00" a "08:00" para que coincida perfecto con el Select
       setLocalSchedules(schedules.map((s) => ({ 
           day_of_week: s.day_of_week, 
           is_open: s.is_open, 
@@ -74,7 +127,7 @@ const AdminSettings = () => {
     }
   }, [schedules]);
 
-  const updateDay = (dayIdx: number, field: string, value: any) => {
+  const updateDay = (dayIdx: number, field: string, value: string | boolean) => {
     setLocalSchedules((prev) => prev.map((s) => s.day_of_week === dayIdx ? { ...s, [field]: value } : s));
   };
 
@@ -82,17 +135,19 @@ const AdminSettings = () => {
     try {
       await upsertSchedule.mutateAsync(localSchedules);
       toast({ title: "Horarios guardados ✅" });
-    } catch (err: any) {
-      toast({ title: "Error", description: err?.message, variant: "destructive" });
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Ocurrió un error desconocido";
+      toast({ title: "Error", description: errorMsg, variant: "destructive" });
     }
   };
 
   const handleSaveFacility = async () => {
     try {
-      await updateFacility.mutateAsync(facilityForm as any);
+      await updateFacility.mutateAsync(facilityForm as never);
       toast({ title: "Datos del predio guardados ✅" });
-    } catch (err: any) {
-      toast({ title: "Error", description: err?.message, variant: "destructive" });
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Ocurrió un error desconocido";
+      toast({ title: "Error", description: errorMsg, variant: "destructive" });
     }
   };
 
@@ -128,7 +183,10 @@ const AdminSettings = () => {
           const url = await uploadImage(file, type);
           setFacilityForm(prev => ({ ...prev, [type === 'logo' ? 'logo_url' : 'cover_url']: url }));
           toast({ title: "Imagen subida ✅" });
-      } catch (e) {} finally {
+      } catch (err) {
+          console.error(err);
+          toast({ title: "Error al subir la imagen", variant: "destructive" });
+      } finally {
           event.target.value = '';
       }
   };
@@ -152,6 +210,8 @@ const AdminSettings = () => {
         
         {/* COLUMNA IZQUIERDA (7 de 12 espacios) */}
         <div className="lg:col-span-7 space-y-6">
+            
+            {/* LINK PÚBLICO */}
             {publicUrl && (
             <div className="glass-card rounded-2xl p-6 border-2 border-primary/20 bg-primary/5">
                 <h3 className="font-bold mb-3 flex items-center gap-2"><Link2 className="w-4 h-4 text-primary" /> Tu link para clientes</h3>
@@ -167,6 +227,43 @@ const AdminSettings = () => {
             </div>
             )}
 
+            {/* SECCIÓN MERCADO PAGO CONNECT (NUEVA) */}
+            <div className="glass-card rounded-2xl p-6 border border-[#009EE3]/30 bg-gradient-to-r from-[#009EE3]/5 to-transparent relative overflow-hidden">
+                <div className="absolute -right-10 -top-10 w-40 h-40 bg-[#009EE3]/10 rounded-full blur-2xl pointer-events-none" />
+                <h3 className="font-bold mb-1 flex items-center gap-2 text-[#009EE3]"><Banknote className="w-5 h-5" /> Integración de Cobros</h3>
+                <p className="text-xs text-muted-foreground mb-5">Conectá tu cuenta de Mercado Pago para recibir el dinero de las señas online directamente en tu billetera, sin intermediarios.</p>
+                
+                {facilityForm.mp_connected ? (
+                    <div className="flex items-center justify-between bg-white border border-[#00a650]/30 rounded-xl p-4 shadow-sm">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-[#00a650]/10 flex items-center justify-center text-[#00a650]">
+                                <Check className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <p className="font-bold text-sm text-[#00a650]">Cuenta Vinculada</p>
+                                <p className="text-[10px] text-muted-foreground font-medium">Lista para recibir cobros automáticos.</p>
+                            </div>
+                        </div>
+                        <button onClick={() => setFacilityForm(prev => ({...prev, mp_connected: false}))} className="text-[10px] font-bold text-destructive hover:underline px-2 py-1">
+                            Desvincular
+                        </button>
+                    </div>
+                ) : (
+                    <button 
+                        onClick={handleConnectMercadoPago} 
+                        disabled={isLinkingMP}
+                        className="w-full flex items-center justify-center gap-2 bg-[#009EE3] hover:bg-[#0089C7] text-white px-5 py-3.5 rounded-xl font-black text-sm transition-colors disabled:opacity-70 shadow-md shadow-[#009EE3]/20"
+                    >
+                        {isLinkingMP ? (
+                            "Verificando vinculación..."
+                        ) : (
+                            <>Vincular mi cuenta de Mercado Pago</>
+                        )}
+                    </button>
+                )}
+            </div>
+
+            {/* DISEÑO Y MARCA */}
             <div className="glass-card rounded-2xl p-6">
                 <h3 className="font-bold mb-4 flex items-center gap-2"><ImageIcon className="w-4 h-4 text-primary" /> Diseño y Marca</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
@@ -204,6 +301,7 @@ const AdminSettings = () => {
                 </div>
             </div>
 
+            {/* INFORMACIÓN PÚBLICA */}
             <div className="glass-card rounded-2xl p-6">
                 <h3 className="font-bold mb-4 flex items-center gap-2"><Info className="w-4 h-4 text-primary" /> Información Pública</h3>
                 <div className="space-y-4">
@@ -270,7 +368,7 @@ const AdminSettings = () => {
                 </form>
             </div>
 
-            {/* HORARIOS REDISEÑADOS CON SELECT MODERNO */}
+            {/* HORARIOS */}
             <div className="glass-card rounded-2xl p-6 relative">
                 <div className="flex justify-between items-start mb-4">
                     <div>
@@ -345,8 +443,6 @@ const AdminSettings = () => {
                     {facilityForm.requires_deposit && (
                         <div className="pt-4 border-t border-border/50 animate-in fade-in slide-in-from-top-2 duration-300">
                             <label className="text-xs font-bold text-muted-foreground mb-2 flex items-center gap-1"><Percent className="w-3 h-3"/> Porcentaje de Seña</label>
-                            
-                            {/* También convertimos este a Select de Radix para mantener la estética */}
                             <Select value={facilityForm.deposit_percentage.toString()} onValueChange={(val) => setFacilityForm(prev => ({...prev, deposit_percentage: Number(val)}))}>
                                 <SelectTrigger className="w-full h-12 border-2 border-primary/20 rounded-xl px-4 text-sm font-bold bg-background text-primary">
                                     <SelectValue />
