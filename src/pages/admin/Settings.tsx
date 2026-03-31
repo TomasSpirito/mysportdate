@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { useFacility, useUpdateFacility, useFacilitySchedules, useUpsertFacilitySchedule, useUploadFacilityImage, type Facility } from "@/hooks/use-supabase-data";
-import { Clock, MapPin, Phone, Save, Mail, MessageCircle, Link2, Copy, Check, Image as ImageIcon, Instagram, Map, Info, Star, Upload, Plus, Percent, ShieldCheck, Banknote } from "lucide-react";
+import { Clock, MapPin, Phone, Save, Mail, MessageCircle, Link2, Copy, Check, Image as ImageIcon, Instagram, Map, Info, Star, Upload, Plus, Percent, ShieldCheck, Banknote, Timer } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
@@ -14,6 +14,7 @@ type ExtendedFacility = Facility & {
   requires_deposit?: boolean;
   deposit_percentage?: number;
   mp_connected?: boolean; // Bandera para saber si ya vinculó MP
+  cancellation_window_hours?: number;
 };
 
 const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
@@ -43,7 +44,8 @@ const AdminSettings = () => {
       amenities: [] as string[],
       requires_deposit: false,
       deposit_percentage: 50,
-      mp_connected: false
+      mp_connected: false,
+      cancellation_window_hours: 12
   });
   
   const [localSchedules, setLocalSchedules] = useState<{ day_of_week: number; is_open: boolean; open_time: string; close_time: string }[]>([]);
@@ -115,7 +117,8 @@ const AdminSettings = () => {
         amenities: facility.amenities || [],
         requires_deposit: facility.requires_deposit || false,
         deposit_percentage: facility.deposit_percentage || 50,
-        mp_connected: facility.mp_connected || false
+        mp_connected: facility.mp_connected || false,
+        cancellation_window_hours: facility.cancellation_window_hours ?? 12
       });
     }
   }, [facility]);
@@ -460,7 +463,7 @@ const AdminSettings = () => {
 
             <div className="glass-card rounded-2xl p-6 relative border-t-4 border-t-primary shadow-lg bg-primary/5">
                 <h3 className="font-bold mb-1 flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-primary" /> Política de Reservas</h3>
-                <p className="text-xs text-muted-foreground mb-5">Protegé tus horarios exigiendo una seña online obligatoria.</p>
+                <p className="text-xs text-muted-foreground mb-5">Protegé tus horarios exigiendo una seña online obligatoria y definiendo el tiempo de cancelación.</p>
 
                 <div className="bg-card border border-border rounded-xl p-4 space-y-4">
                     <div className="flex items-center justify-between">
@@ -492,6 +495,31 @@ const AdminSettings = () => {
                             </Select>
                         </div>
                     )}
+                </div>
+                {/* CONFIGURACIÓN DE CANCELACIONES */}
+                <div className="bg-card border border-border rounded-xl p-4 mt-4">
+                    <div className="mb-4">
+                        <p className="font-bold text-sm">Cancelación de turnos</p>
+                        <p className="text-[10px] text-muted-foreground">Tiempo límite de anticipación para que el cliente pueda cancelar su reserva desde la app.</p>
+                    </div>
+
+                    <div>
+                        <label className="text-xs font-bold text-muted-foreground mb-2 flex items-center gap-1"><Timer className="w-3 h-3"/> Anticipación mínima permitida</label>
+                        <Select value={facilityForm.cancellation_window_hours.toString()} onValueChange={(val) => setFacilityForm(prev => ({...prev, cancellation_window_hours: Number(val)}))}>
+                            <SelectTrigger className="w-full h-12 border-2 border-primary/20 rounded-xl px-4 text-sm font-bold bg-background text-primary">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="2" className="font-bold text-xs">Hasta 2 horas antes</SelectItem>
+                                <SelectItem value="4" className="font-bold text-xs">Hasta 4 horas antes</SelectItem>
+                                <SelectItem value="12" className="font-bold text-xs">Hasta 12 horas antes</SelectItem>
+                                <SelectItem value="24" className="font-bold text-xs">Hasta 24 horas antes</SelectItem>
+                                <SelectItem value="48" className="font-bold text-xs">Hasta 48 horas antes</SelectItem>
+                                <SelectItem value="168" className="font-bold text-xs">Hasta 1 semana antes</SelectItem>
+                                <SelectItem value="0" className="font-bold text-xs">No permitir cancelar (0 horas)</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
                 </div>
             </div>
             
