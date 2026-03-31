@@ -13,11 +13,14 @@ serve(async (req) => {
 
   try {
     const { code, redirectUri, facilityId } = await req.json()
+    console.log("1. Recibido code:", code, "para facility:", facilityId);
 
     const MP_CLIENT_ID = Deno.env.get('MP_CLIENT_ID')
     const MP_CLIENT_SECRET = Deno.env.get('MP_CLIENT_SECRET')
 
-    // 1. Canjeamos el código temporal por el Access Token de MP
+    console.log("2. Enviando a MP con Client ID:", MP_CLIENT_ID);
+
+    // Canjeamos el código
     const mpResponse = await fetch('https://api.mercadopago.com/oauth/token', {
       method: 'POST',
       headers: {
@@ -34,12 +37,13 @@ serve(async (req) => {
     })
 
     const mpData = await mpResponse.json()
+    console.log("3. Respuesta de Mercado Pago:", mpData);
 
     if (!mpResponse.ok) {
-      throw new Error(mpData.message || 'Error al canjear código en Mercado Pago')
+      throw new Error(`Error de MP: ${JSON.stringify(mpData)}`)
     }
 
-    // 2. Guardamos los tokens en la tabla 'facilities'
+    // Guardamos en Supabase
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -55,13 +59,18 @@ serve(async (req) => {
       })
       .eq('id', facilityId)
 
-    if (dbError) throw dbError
+    if (dbError) {
+        console.error("4. Error al guardar en Base de Datos:", dbError);
+        throw dbError;
+    }
 
+    console.log("5. ¡Todo guardado con éxito!");
     return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     })
   } catch (error) {
+    console.error("❌ ERROR ATRAPADO:", error);
     const errorMessage = error instanceof Error ? error.message : "Error desconocido";
     return new Response(JSON.stringify({ error: errorMessage }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

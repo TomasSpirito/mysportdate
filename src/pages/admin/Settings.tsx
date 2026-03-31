@@ -250,7 +250,21 @@ const AdminSettings = () => {
                                 <p className="text-[10px] text-muted-foreground font-medium">Lista para recibir cobros automáticos.</p>
                             </div>
                         </div>
-                        <button onClick={() => setFacilityForm(prev => ({...prev, mp_connected: false}))} className="text-[10px] font-bold text-destructive hover:underline px-2 py-1">
+                        <button 
+                            onClick={async () => {
+                                try {
+                                    // 1. Le avisamos a la base de datos que la cuenta se desconectó
+                                    await updateFacility.mutateAsync({ mp_connected: false } as never);
+                                    // 2. Actualizamos la pantalla
+                                    setFacilityForm(prev => ({...prev, mp_connected: false}));
+                                    toast({ title: "Cuenta desvinculada ✅" });
+                                } catch (err) {
+                                    toast({ title: "Error", description: "No se pudo desvincular la cuenta.", variant: "destructive" });
+                                }
+                            }} 
+                            disabled={updateFacility.isPending}
+                            className="text-[10px] font-bold text-destructive hover:underline px-2 py-1 disabled:opacity-50"
+                        >
                             Desvincular
                         </button>
                     </div>
