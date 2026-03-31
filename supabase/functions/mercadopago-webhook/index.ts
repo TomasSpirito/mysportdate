@@ -1,22 +1,23 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
-serve(async (req: Request) => {
+// @ts-ignore
+Deno.serve(async (req: Request) => {
   try {
     const payload = await req.json();
     console.log("Webhook recibido de Mercado Pago:", payload);
 
     if (payload.action === "payment.created" || payload.action === "payment.updated" || payload.type === "payment") {
       const paymentId = payload.data?.id || payload.id;
-      const mpUserId = payload.user_id; // <- MP nos dice quién es el dueño que cobró
+      const mpUserId = payload.user_id;
 
       if (!mpUserId) throw new Error("No viene user_id en el webhook");
 
+      // @ts-ignore
       const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+      // @ts-ignore
       const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""; 
       const supabase = createClient(supabaseUrl, supabaseKey);
 
-      // 1. Buscamos el token del dueño de la cancha usando el mp_user_id
       const { data: facility, error: facilityError } = await supabase
         .from("facilities")
         .select("mp_access_token")
@@ -29,7 +30,6 @@ serve(async (req: Request) => {
 
       const MP_ACCESS_TOKEN = facility.mp_access_token;
 
-      // 2. Verificamos el pago con el token correcto
       const mpRes = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
         headers: { Authorization: `Bearer ${MP_ACCESS_TOKEN}` }
       });
