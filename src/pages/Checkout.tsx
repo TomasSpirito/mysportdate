@@ -4,13 +4,20 @@ import { motion } from "framer-motion";
 import { format, parse } from "date-fns";
 import { es } from "date-fns/locale";
 // IMPORTAMOS useFacility y useCreateBooking
-import { useCourt, useAddons, useFacility, useCreateBooking } from "@/hooks/use-supabase-data";
+import { useCourt, useAddons, useFacility, useCreateBooking, type Facility } from "@/hooks/use-supabase-data";
 import { useTenantPath } from "@/hooks/use-tenant";
 import PlayerLayout from "@/components/layout/PlayerLayout";
 import { cn } from "@/lib/utils";
 import { Check, Clock, CreditCard, User, Mail, Phone, Loader2, Trophy, Calendar, ShieldCheck, Banknote } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+
+// Extendemos el tipo Facility nativo para incluir las columnas de seña
+type ExtendedFacility = Facility & {
+  requires_deposit?: boolean;
+  deposit_percentage?: number;
+  mp_connected?: boolean;
+};
 
 const Checkout = () => {
   const [params] = useSearchParams();
@@ -22,7 +29,8 @@ const Checkout = () => {
   
   const { data: court } = useCourt(courtId || undefined);
   const { data: addons = [] } = useAddons();
-  const { data: facility } = useFacility(); // TRAEMOS LA CONFIGURACIÓN DEL PREDIO
+  const { data: facilityBase } = useFacility(); 
+  const facility = facilityBase as ExtendedFacility | undefined;
   const createBooking = useCreateBooking(); // TRAEMOS EL MUTATOR PARA RESERVAS DE $0
 
   const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
@@ -118,13 +126,20 @@ const Checkout = () => {
       }
 
       // SI HAY QUE PAGAR ALGO, VAMOS A MERCADO PAGO
+      // Validación de seguridad: Asegurarnos de que el predio cargó
+      if (!facility?.id) {
+        throw new Error("No se pudo identificar el predio para realizar el cobro.");
+      }
+
       const paymentDesc = payDeposit ? `Seña - ${court.name} (${date} ${time})` : `Reserva - ${court.name} (${date} ${time})`;
       const currentUrl = window.location.href.split("?")[0];
       const backBase = `${currentUrl}?court=${courtId}&date=${date}&time=${time}`;
 
       const { data, error } = await supabase.functions.invoke("mercadopago-checkout", {
         body: {
-          title: paymentDesc, unit_price: amountToPay,
+          title: paymentDesc, 
+          unit_price: amountToPay,
+          facility_id: facility.id, // <-- EL DATO CLAVE AÑADIDO ACÁ
           booking_data: {
             court_id: courtId, date: date, time: time, user_name: name.trim(), user_email: email.trim(), user_phone: phone.trim(),
             total_price: total, deposit_amount: payDeposit ? depositAmount : total, payment_status: payDeposit ? "partial" : "full", addon_ids: selectedAddons.join(","),

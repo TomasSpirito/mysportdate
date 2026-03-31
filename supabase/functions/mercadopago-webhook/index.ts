@@ -8,12 +8,28 @@ serve(async (req: Request) => {
 
     if (payload.action === "payment.created" || payload.action === "payment.updated" || payload.type === "payment") {
       const paymentId = payload.data?.id || payload.id;
+      const mpUserId = payload.user_id; // <- MP nos dice quién es el dueño que cobró
 
-      const MP_ACCESS_TOKEN = Deno.env.get("MERCADOPAGO_ACCESS_TOKEN");
+      if (!mpUserId) throw new Error("No viene user_id en el webhook");
+
       const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
       const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""; 
       const supabase = createClient(supabaseUrl, supabaseKey);
 
+      // 1. Buscamos el token del dueño de la cancha usando el mp_user_id
+      const { data: facility, error: facilityError } = await supabase
+        .from("facilities")
+        .select("mp_access_token")
+        .eq("mp_user_id", mpUserId.toString())
+        .single();
+
+      if (facilityError || !facility?.mp_access_token) {
+        throw new Error("No se encontró el token de MP para este predio");
+      }
+
+      const MP_ACCESS_TOKEN = facility.mp_access_token;
+
+      // 2. Verificamos el pago con el token correcto
       const mpRes = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
         headers: { Authorization: `Bearer ${MP_ACCESS_TOKEN}` }
       });
@@ -21,14 +37,10 @@ serve(async (req: Request) => {
 
       if (paymentData.status === "approved" && paymentData.metadata) {
         const meta = paymentData.metadata;
-        console.log("Pago aprobado. Metadata oculta:", meta);
+        console.log("Pago aprobado. Metadata:", meta);
 
-        // --- EL FIX: Forzamos la hora literal ignorando zonas horarias ---
-        // Usamos la "Z" para que si la cancha es a las 19:00, se guarde como 19:00:00 exacto
         const startString = `${meta.date}T${meta.time}:00.000Z`;
         const startDate = new Date(startString);
-        
-        // Sumamos 1 hora para calcular el end_time de la cancha
         const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
 
         const newBooking = {
@@ -45,22 +57,19 @@ serve(async (req: Request) => {
           booking_type: "online"
         };
 
-        console.log("Intentando insertar en Supabase:", newBooking);
-
         const { error } = await supabase.from("bookings").insert(newBooking);
 
         if (error) {
-          console.error("ERROR DE SUPABASE AL CREAR RESERVA:", error);
+          console.error("ERROR AL CREAR RESERVA:", error);
         } else {
-          console.log("¡RESERVA CREADA CON ÉXITO EN LA BASE DE DATOS!");
+          console.log("¡RESERVA CREADA CON ÉXITO!");
         }
       }
     }
 
     return new Response("OK", { status: 200 });
-
   } catch (err: unknown) {
-    console.error("Error general en el Webhook:", err);
+    console.error("Error general en Webhook:", err);
     return new Response("Procesado con errores", { status: 200 });
   }
 });
