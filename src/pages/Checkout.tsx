@@ -150,10 +150,8 @@ const Checkout = () => {
 
       if (error) throw error;
       
-      // FORZAMOS EL MODO SANDBOX (PRUEBAS)
-      if (data.sandbox_init_point) {
-        window.location.href = data.sandbox_init_point;
-      } else if (data.init_point) {
+      // VAMOS A LA PASARELA REAL DE PRODUCCIÓN
+      if (data.init_point) {
         window.location.href = data.init_point;
       } else {
         throw new Error("No se obtuvo URL de pago de MercadoPago");
