@@ -39,7 +39,7 @@ Deno.serve(async (req: Request) => {
         const meta = paymentData.metadata;
         console.log("Pago aprobado. Metadata:", meta);
 
-        const startString = `${meta.date}T${meta.time}:00.000Z`;
+        const startString = `${meta.date}T${meta.time}:00.000-03:00`;
         const startDate = new Date(startString);
         const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
 

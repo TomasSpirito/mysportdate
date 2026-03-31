@@ -63,7 +63,13 @@ const AdminDashboard = () => {
   const visibleCourts = courtFilter === "all" ? courts : courts.filter(c => c.id === courtFilter);
 
   const getBooking = (courtId: string, hour: string) =>
-    bookings.find((b) => { const bHour = new Date(b.start_time).getUTCHours(); return b.court_id === courtId && `${bHour.toString().padStart(2, "0")}:00` === hour; });
+      bookings.find((b) => { 
+        // new Date() lee la hora de Londres y la convierte a tu hora local automáticamente
+        const dateObj = new Date(b.start_time);
+        const bHour = dateObj.getHours().toString().padStart(2, "0");
+        // Armamos el texto "HH:00" para que coincida con la grilla
+        return b.court_id === courtId && `${bHour}:00` === hour; 
+      });
 
   const getCourtName = (courtId: string) => courts.find((c) => c.id === courtId)?.name || "";
   const getCourtPrice = (courtId: string) => courts.find((c) => c.id === courtId)?.price_per_hour || 0;

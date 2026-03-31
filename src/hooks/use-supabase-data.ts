@@ -135,16 +135,16 @@ export function useBookingsByCourt(courtId?: string, date?: string) {
 }
 
 export function generateAvailableSlots(bookings: Booking[], date: string, openHour = 8, closeHour = 23) {
-  const occupiedHours = new Set(bookings.map((b) => new Date(b.start_time).getUTCHours()));
+  // Usamos getHours() para obtener la hora local exacta
+  const occupiedHours = new Set(bookings.map((b) => new Date(b.start_time).getHours()));
+  
   const slots: { time: string; available: boolean }[] = [];
   
   for (let h = openHour; h < closeHour; h++) {
-    // MAGIA VISUAL: Si h es 24, displayH es 0. Si h es 25, displayH es 1.
     const displayH = h % 24; 
     
     slots.push({ 
       time: `${displayH.toString().padStart(2, "0")}:00`, 
-      // MAGIA LÓGICA: Buscamos si la hora real (ej: 0, 1) está ocupada, no el 24 o 25
       available: !occupiedHours.has(displayH) 
     });
   }
@@ -175,8 +175,8 @@ export function useCreateBooking() {
       total_price: number; deposit_amount: number; payment_status: string; booking_type?: string; addon_ids?: string[];
     }) => {
       const startHour = parseInt(params.time.split(":")[0]);
-      const start_time = `${params.date}T${params.time}:00+00:00`;
-      const end_time = `${params.date}T${(startHour + 1).toString().padStart(2, "0")}:00:00+00:00`;
+      const start_time = `${params.date}T${params.time}:00-03:00`;
+      const end_time = `${params.date}T${(startHour + 1).toString().padStart(2, "0")}:00:00-03:00`;
       const { data, error } = await supabase.rpc("create_booking" as any, {
         p_court_id: params.court_id, p_start_time: start_time, p_end_time: end_time,
         p_user_name: params.user_name, p_user_email: params.user_email, p_user_phone: params.user_phone,

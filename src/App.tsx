@@ -24,6 +24,7 @@ import AdminExpenses from "./pages/admin/Expenses";
 import AdminPlayers from "./pages/admin/Players";
 import AdminBuffet from "./pages/admin/Buffet";
 import NotFound from "./pages/NotFound";
+import CancelBooking from "@/pages/CancelBooking";
 
 const queryClient = new QueryClient();
 
@@ -39,6 +40,7 @@ const App = () => (
             <Route path="/" element={<Landing />} />
             <Route path="/auth/login" element={<Login />} />
             <Route path="/auth/update-password" element={<UpdatePassword />} /> {/* <-- NUEVA RUTA */}
+            <Route path="/cancelar/:token" element={<CancelBooking />} />
 
             {/* Public tenant pages */}
             <Route path="/predio/:slug" element={<TenantRoute />}>
