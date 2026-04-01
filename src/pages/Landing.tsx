@@ -253,7 +253,7 @@ const Landing = () => {
                     <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/60" />
                     <span className="ml-3 text-[10px] text-slate-600 font-medium">admin.myspordate.com</span>
                   </div>
-                  <img src="/MySportdateImg.jpg" alt="MySpordate Dashboard" className="w-full h-full object-cover opacity-75" />
+                  <img src="/MySportdateImg.JPG" alt="MySpordate Dashboard" className="w-full h-full object-cover opacity-75" />
                 </div>
               </motion.div>
             </motion.div>
