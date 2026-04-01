@@ -61,7 +61,7 @@ serve(async (req) => {
       body: JSON.stringify({
         from: "MySportdate <onboarding@resend.dev>",
         to: [record.user_email],
-        subject: `¡Reserva Confirmada en ${facility.name}! 🎾`,
+        subject: `¡Reserva Confirmada en ${facility.name}! ⚽`, 
         html: `
           <div style="font-family: sans-serif; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 15px;">
             <h2 style="color: #16a34a; text-align: center;">¡Tu turno está confirmado!</h2>
