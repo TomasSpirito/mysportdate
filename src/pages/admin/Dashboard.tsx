@@ -30,6 +30,9 @@ const AdminDashboard = () => {
   });
   
   const [collectMethod, setCollectMethod] = useState("efectivo");
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelReason, setCancelReason] = useState("client_excused");
+  const [refundStatus, setRefundStatus] = useState("none");
 
   const dateStr = format(selectedDate, "yyyy-MM-dd");
   
@@ -106,22 +109,24 @@ const AdminDashboard = () => {
     setSelectedBooking(null);
   };
 
-  const handleCancel = async () => {
+  const handleConfirmCancel = async () => {
     if (!selectedBooking) return;
-    if (!confirm("¿Seguro que querés cancelar esta reserva? Se liberará la cancha pero quedará el registro en el fondo de la pantalla.")) return;
     
-    // En vez de borrarla, le cambiamos el estado a "cancelled"
     await updateBooking.mutateAsync({ 
         id: selectedBooking.id, 
         status: "cancelled",
-        cancelled_at: new Date().toISOString()
+        cancelled_at: new Date().toISOString(),
+        cancellation_reason: cancelReason,
+        refund_status: selectedBooking.deposit_amount > 0 ? refundStatus : "none"
     } as any);
     
     toast({ title: "Reserva cancelada y cancha liberada" });
     setSelectedBooking(null);
+    setIsCancelling(false);
   };
 
   const handleSlotClick = (courtId: string, hour: string) => {
+    setIsCancelling(false); // <-- AGREGAR ESTO
     const booking = getBooking(courtId, hour);
     if (booking) {
       setSelectedBooking(booking);
@@ -290,24 +295,57 @@ const AdminDashboard = () => {
             </div>
             
             <div className="space-y-3 text-sm mb-4">
-              <div className="flex justify-between"><span className="text-muted-foreground">Jugador</span><span className="font-bold text-base">{selectedBooking.user_name}</span></div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground font-bold">Jugador</span>
+                <span className="font-bold text-base">{selectedBooking.user_name}</span>
+              </div>
+              
               {selectedBooking.user_phone && (
-                <div className="flex justify-between items-center"><span className="text-muted-foreground flex items-center gap-1"><Phone className="w-3.5 h-3.5" />Teléfono</span><span className="font-semibold">{selectedBooking.user_phone}</span></div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-bold flex items-center gap-1"><Phone className="w-3.5 h-3.5" />Teléfono</span>
+                  <span className="font-bold">{selectedBooking.user_phone}</span>
+                </div>
               )}
+              
               {selectedBooking.user_email && (
-                <div className="flex justify-between items-center"><span className="text-muted-foreground flex items-center gap-1"><Mail className="w-3.5 h-3.5" />Email</span><span className="font-medium text-xs">{selectedBooking.user_email}</span></div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-bold flex items-center gap-1"><Mail className="w-3.5 h-3.5" />Email</span>
+                  <span className="font-bold text-xs">{selectedBooking.user_email}</span>
+                </div>
               )}
-              <div className="flex justify-between"><span className="text-muted-foreground">Cancha</span><span className="font-bold">{getCourtName(selectedBooking.court_id)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Horario</span><span className="font-bold">{format(new Date(selectedBooking.start_time), "HH:mm")} - {format(new Date(selectedBooking.end_time), "HH:mm")} hs</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Origen</span><span className="font-bold bg-muted px-2 py-0.5 rounded-md">{typeLabels[selectedBooking.booking_type] || selectedBooking.booking_type}</span></div>
               
-              <div className="border-t border-border border-dashed my-3" />
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground font-bold">Cancha</span>
+                <span className="font-bold">{getCourtName(selectedBooking.court_id)}</span>
+              </div>
               
-              <div className="flex justify-between"><span className="text-muted-foreground font-medium">Costo Total</span><span className="font-black text-lg">${selectedBooking.total_price.toLocaleString()}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground font-medium">Abonado</span><span className="font-black text-primary">${selectedBooking.deposit_amount.toLocaleString()}</span></div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground font-bold">Horario</span>
+                <span className="font-bold">{format(new Date(selectedBooking.start_time), "HH:mm")} - {format(new Date(selectedBooking.end_time), "HH:mm")} hs</span>
+              </div>
+              
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground font-bold">Origen</span>
+                <span className="font-bold bg-muted px-2 py-0.5 rounded-md">{typeLabels[selectedBooking.booking_type] || selectedBooking.booking_type}</span>
+              </div>
+              
+              <div className="border-t border-border border-dashed my-4" />
+              
+              <div className="flex justify-between items-center">
+                {/* Cambiamos font-medium a font-bold para unificar pesos */}
+                <span className="text-muted-foreground font-bold">Costo Total</span>
+                <span className="font-black text-lg">${selectedBooking.total_price.toLocaleString()}</span>
+              </div>
+              
+              <div className="flex justify-between items-center">
+                {/* Cambiamos font-medium a font-bold para unificar pesos */}
+                <span className="text-muted-foreground font-bold">Abonado</span>
+                <span className="font-black text-lg text-primary">${selectedBooking.deposit_amount.toLocaleString()}</span>
+              </div>
               
               {selectedBooking.total_price > selectedBooking.deposit_amount && (
-                <div className="flex justify-between bg-orange-500/10 p-2 rounded-lg border border-orange-500/20">
+                <div className="flex justify-between items-center bg-orange-500/10 p-3 rounded-xl border border-orange-500/20 mt-2">
+                    {/* Esta ya era font-bold, ahora todo el bloque coincide perfectamente */}
                     <span className="text-orange-700 font-bold">Resta Cobrar</span>
                     <span className="font-black text-orange-600 text-lg">${(selectedBooking.total_price - selectedBooking.deposit_amount).toLocaleString()}</span>
                 </div>
@@ -334,10 +372,48 @@ const AdminDashboard = () => {
               </div>
             )}
             
-            <button onClick={handleCancel} disabled={deleteBooking.isPending}
-              className="w-full mt-3 border-2 border-destructive/20 text-destructive py-2.5 rounded-xl text-sm font-bold hover:bg-destructive hover:text-white transition-colors disabled:opacity-50">
-              Liberar Cancha (Cancelar)
-            </button>
+            {/* ZONA DE CANCELACIÓN AVANZADA */}
+            {!isCancelling ? (
+              <button onClick={() => setIsCancelling(true)} disabled={deleteBooking.isPending || updateBooking.isPending}
+                className="w-full mt-3 border-2 border-destructive/20 text-destructive py-2.5 rounded-xl text-sm font-bold hover:bg-destructive hover:text-white transition-colors disabled:opacity-50">
+                Liberar Cancha (Cancelar)
+              </button>
+            ) : (
+              <div className="mt-4 bg-destructive/5 border border-destructive/20 rounded-xl p-4 space-y-3 animate-in fade-in zoom-in-95 duration-200">
+                  <h4 className="font-bold text-destructive text-sm flex items-center gap-1.5"><AlertCircle className="w-4 h-4"/> Confirmar Cancelación</h4>
+                  
+                  <div>
+                      <label className="text-xs font-bold text-muted-foreground mb-1 block">Motivo de la cancelación</label>
+                      <select className="w-full appearance-none border-2 border-border/50 rounded-xl px-4 py-3 text-sm font-semibold bg-muted/30 outline-none focus:border-destructive focus:bg-background transition-all cursor-pointer" style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }} 
+                              value={cancelReason} onChange={(e) => setCancelReason(e.target.value)}>
+                          <option value="client_excused">Avisó con tiempo (Cliente)</option>
+                          <option value="no_show">Faltó sin avisar (No Show)</option>
+                          <option value="club">Problema del predio (Lluvia, luz, etc)</option>
+                      </select>
+                  </div>
+
+                  {selectedBooking.deposit_amount > 0 && (
+                      <div>
+                          <label className="text-xs font-bold text-muted-foreground mb-1 block">¿Qué hacemos con los ${selectedBooking.deposit_amount} abonados?</label>
+                          <select className="w-full appearance-none border-2 border-border/50 rounded-xl px-4 py-3 text-sm font-semibold bg-muted/30 outline-none focus:border-destructive focus:bg-background transition-all cursor-pointer" style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }} 
+                                  value={refundStatus} onChange={(e) => setRefundStatus(e.target.value)}>
+                              <option value="none">Seleccionar acción...</option>
+                              <option value="kept">Retener el dinero (Penalidad)</option>
+                              <option value="refunded">Devolver el dinero al cliente</option>
+                          </select>
+                      </div>
+                  )}
+
+                  <div className="flex gap-2 pt-2">
+                      <button onClick={() => setIsCancelling(false)} className="flex-1 py-2 rounded-lg text-xs font-bold bg-muted hover:bg-muted/80 transition-colors">Atrás</button>
+                      <button onClick={handleConfirmCancel} 
+                              disabled={updateBooking.isPending || (selectedBooking.deposit_amount > 0 && refundStatus === "none")} 
+                              className="flex-1 py-2 rounded-lg text-xs font-bold bg-destructive text-white hover:opacity-90 transition-opacity disabled:opacity-50">
+                          Confirmar Baja
+                      </button>
+                  </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -439,10 +515,18 @@ const AdminDashboard = () => {
                     <div key={b.id} className="bg-destructive/5 border border-destructive/20 rounded-xl p-3 flex flex-col gap-1">
                         <div className="flex justify-between items-start">
                             <span className="font-bold text-sm">{b.user_name || "Sin nombre"}</span>
-                            <span className="text-xs bg-destructive text-white px-2 py-0.5 rounded-md font-bold">Liberada</span>
+                            <span className={cn("text-[10px] px-2 py-0.5 rounded-md font-bold uppercase", 
+                                b.cancellation_reason === 'no_show' ? "bg-red-500 text-white" : 
+                                b.cancellation_reason === 'club' ? "bg-orange-500 text-white" : "bg-muted-foreground text-white")}>
+                                {b.cancellation_reason === 'no_show' ? 'No Show' : b.cancellation_reason === 'club' ? 'Predio' : 'Avisó'}
+                            </span>
                         </div>
                         <span className="text-xs text-muted-foreground">{getCourtName(b.court_id)} • {format(new Date(b.start_time), "HH:mm")} hs</span>
-                        <span className="text-[10px] text-muted-foreground italic mt-1">Seña retenida / devuelta: ${b.deposit_amount}</span>
+                        {b.deposit_amount > 0 && (
+                            <span className="text-[10px] font-bold mt-1 text-destructive">
+                                {b.refund_status === 'kept' ? `Seña retenida: $${b.deposit_amount}` : b.refund_status === 'refunded' ? `Seña devuelta: $${b.deposit_amount}` : 'Revisar seña'}
+                            </span>
+                        )}
                     </div>
                 ))}
             </div>

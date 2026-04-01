@@ -44,7 +44,28 @@ const BookingCalendar = () => {
   }
 
   const slots = useMemo(() => generateAvailableSlots(bookings, dateStr, openHour, closeHour), [bookings, dateStr, openHour, closeHour]);
-  const availableSlots = slots.filter((s) => s.available);
+  
+  const availableSlots = useMemo(() => {
+    const now = new Date();
+    // Verificamos si la fecha seleccionada es exactamente el día de hoy
+    const isToday = format(selectedDate, "yyyy-MM-dd") === format(now, "yyyy-MM-dd");
+    const currentHour = now.getHours();
+
+    return slots.filter((s) => {
+      // 1. Si ya está reservada en la base de datos, la ocultamos
+      if (!s.available) return false;
+      
+      // 2. Si es hoy, bloqueamos los horarios que ya pasaron (y la hora actual)
+      if (isToday) {
+        const slotHour = parseInt(s.time.split(":")[0]);
+        // Solo mostramos si la hora del turno es estrictamente MAYOR a la hora actual
+        return slotHour > currentHour;
+      }
+      
+      // Si es mañana o cualquier otro día futuro, mostramos todo
+      return true;
+    });
+  }, [slots, selectedDate]);
 
   if (loadingCourt) return <PlayerLayout><div className="container py-10 text-center text-muted-foreground">Cargando...</div></PlayerLayout>;
   if (!court) return null;
@@ -88,7 +109,7 @@ const BookingCalendar = () => {
             <Calendar className="w-5 h-5 text-primary" />
             <span className="text-base font-semibold">Elegí una fecha</span>
           </div>
-          <div className="flex gap-2.5 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide">
+          <div className="flex gap-2.5 overflow-x-auto py-3 -mx-4 px-4 scrollbar-hide">
             {dates.map((date) => {
               const isSelected = format(date, "yyyy-MM-dd") === format(selectedDate, "yyyy-MM-dd");
               const closed = isDateClosed(date);

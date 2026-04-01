@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { format, subDays, startOfMonth, endOfMonth, addMonths, getDay, startOfDay } from "date-fns";
 import { es } from "date-fns/locale";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, AreaChart, Area, CartesianGrid, LineChart, Line } from "recharts";
-import { ChevronLeft, ChevronRight, TrendingDown, Users, Coffee, AlertCircle, Wallet, Smartphone, Target, XCircle, BarChart3, Search, Download } from "lucide-react";
+import { ChevronLeft, ChevronRight, TrendingDown, Users, Coffee, AlertCircle, Wallet, Smartphone, Target, XCircle, BarChart3, Search, Download, CalendarCheck, MapPin, Dribbble } from "lucide-react";
 import { cn } from "@/lib/utils";
 import * as XLSX from 'xlsx';
 import html2canvas from 'html2canvas';
@@ -188,7 +188,21 @@ const AdminAnalytics = () => {
     const totalCancelled = bookings.filter((b) => b.status === "cancelled").length;
     const cancelRate = totalBookings > 0 ? Math.round((totalCancelled / totalBookings) * 100) : 0;
 
-    return { totalBookings, occupancyRate, totalRevenue, pendingPayments, totalExpenses, netProfit, avgTicket, sportBreakdown, courtBreakdown, heatmap, heatmapMax, monthlyFlow, expenseBreakdown, totalClients, cancelRate, buffetTotal, paymentBreakdown, originBreakdown, courtProfitability, occupancyTrend };
+    // 5. ESTADO DE RESERVAS (NUEVO GRÁFICO)
+    const statusMap = { played: 0, user_cancel: 0, club_cancel: 0 };
+    bookings.forEach(b => {
+        if (b.status !== 'cancelled') statusMap.played++;
+        else if (b.cancellation_reason === 'club') statusMap.club_cancel++;
+        else statusMap.user_cancel++;
+    });
+    const statusBreakdown = [
+        { name: "Jugadas", value: statusMap.played, color: "#10b981", pct: totalBookings > 0 ? Math.round((statusMap.played / totalBookings) * 100) : 0 },
+        { name: "Canc. Cliente", value: statusMap.user_cancel, color: "#ef4444", pct: totalBookings > 0 ? Math.round((statusMap.user_cancel / totalBookings) * 100) : 0 },
+        { name: "Canc. Club", value: statusMap.club_cancel, color: "#f97316", pct: totalBookings > 0 ? Math.round((statusMap.club_cancel / totalBookings) * 100) : 0 }
+    ].filter(s => s.value > 0).sort((a,b) => b.value - a.value);
+
+    // 👇 AQUÍ SE ACTUALIZA EL RETURN PARA INCLUIR statusBreakdown 👇
+    return { totalBookings, occupancyRate, totalRevenue, pendingPayments, totalExpenses, netProfit, avgTicket, sportBreakdown, courtBreakdown, heatmap, heatmapMax, monthlyFlow, expenseBreakdown, totalClients, cancelRate, buffetTotal, paymentBreakdown, originBreakdown, courtProfitability, occupancyTrend, statusBreakdown };
   }, [bookings, courts, sports, selectedDate, expenses, schedules, buffetSales]);
 
   const getHeatColor = (count: number, max: number) => {
@@ -292,6 +306,8 @@ const AdminAnalytics = () => {
           setIsExportingPDF(false);
       }
   };
+
+  
 
   return (
     <AdminLayout>
@@ -495,17 +511,17 @@ const AdminAnalytics = () => {
         </div>
       </div>
 
-      {/* FILA 6: LOS 5 GRÁFICOS CATEGÓRICOS AGRUPADOS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
+      {/* FILA 6: LOS 6 GRÁFICOS CATEGÓRICOS AGRUPADOS (GRILLA 3x2 PERFECTA) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         
         {/* Origen Reservas */}
         {stats.originBreakdown.length > 0 && (
-          <div className="glass-card rounded-2xl p-5 flex flex-col hover:border-border/80 transition-colors">
+          <div className="glass-card rounded-2xl p-5 flex flex-col hover:border-border/80 transition-colors shadow-sm">
             <h3 className="font-bold text-sm mb-4 flex items-center gap-2"><Smartphone className="w-4 h-4 text-primary" /> Origen Reservas</h3>
-            <div className="flex-1 w-full mb-4 min-h-[160px]">
+            <div className="h-40 w-full mb-4">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={stats.originBreakdown} dataKey="value" cx="50%" cy="50%" innerRadius={50} outerRadius={80} strokeWidth={2} stroke="var(--background)">
+                  <Pie data={stats.originBreakdown} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} strokeWidth={2} stroke="var(--background)">
                     {stats.originBreakdown.map((e, i) => <Cell key={i} fill={e.color} />)}
                   </Pie>
                   <Tooltip formatter={(v: number) => `${v} turnos`} contentStyle={{ borderRadius: '12px', fontWeight: 'bold' }} />
@@ -527,10 +543,10 @@ const AdminAnalytics = () => {
         {stats.paymentBreakdown.length > 0 && (
           <div className="glass-card rounded-2xl p-5 flex flex-col hover:border-border/80 transition-colors shadow-sm">
             <h3 className="font-bold text-sm mb-4 flex items-center gap-2"><Wallet className="w-4 h-4 text-primary" /> Medios de Cobro</h3>
-            <div className="h-36 w-full mb-4">
+            <div className="h-40 w-full mb-4">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={stats.paymentBreakdown} dataKey="value" cx="50%" cy="50%" innerRadius={45} outerRadius={70} strokeWidth={2} stroke="var(--background)">
+                  <Pie data={stats.paymentBreakdown} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} strokeWidth={2} stroke="var(--background)">
                     {stats.paymentBreakdown.map((e, i) => <Cell key={i} fill={e.color} />)}
                   </Pie>
                   <Tooltip formatter={(v: number) => `$${v.toLocaleString()}`} contentStyle={{ borderRadius: '12px', fontWeight: 'bold' }} />
@@ -548,14 +564,40 @@ const AdminAnalytics = () => {
           </div>
         )}
 
+        {/* NUEVO: Estado de Reservas */}
+        {stats.statusBreakdown.length > 0 && (
+          <div className="glass-card rounded-2xl p-5 flex flex-col hover:border-border/80 transition-colors shadow-sm">
+            <h3 className="font-bold text-sm mb-4 flex items-center gap-2"><CalendarCheck className="w-4 h-4 text-primary" /> Estado Reservas</h3>
+            <div className="h-40 w-full mb-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={stats.statusBreakdown} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} strokeWidth={2} stroke="var(--background)">
+                    {stats.statusBreakdown.map((e, i) => <Cell key={i} fill={e.color} />)}
+                  </Pie>
+                  <Tooltip formatter={(v: number) => `${v} turnos`} contentStyle={{ borderRadius: '12px', fontWeight: 'bold' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="space-y-2.5 mt-auto">
+              {stats.statusBreakdown.map((s) => (
+                <div key={s.name} className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 pr-2"><div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: s.color }} /><span className="font-semibold leading-relaxed py-0.5">{s.name}</span></div>
+                  <div className="flex gap-2 shrink-0 items-center"><span className="font-black text-muted-foreground leading-relaxed">{s.pct}%</span><span className="font-black w-8 text-right leading-relaxed">{s.value}</span></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Egresos */}
         {stats.expenseBreakdown.length > 0 && (
           <div className="glass-card rounded-2xl p-5 flex flex-col hover:border-border/80 transition-colors shadow-sm">
             <h3 className="font-bold text-sm mb-4 flex items-center gap-2"><TrendingDown className="w-4 h-4 text-destructive" /> Top Egresos</h3>
-            <div className="h-36 w-full mb-4">
+            <div className="h-40 w-full mb-4">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={stats.expenseBreakdown} dataKey="value" cx="50%" cy="50%" innerRadius={45} outerRadius={70} strokeWidth={2} stroke="var(--background)">
+                  {/* FIX: nameKey="category" */}
+                  <Pie data={stats.expenseBreakdown} dataKey="value" nameKey="category" cx="50%" cy="50%" innerRadius={50} outerRadius={80} strokeWidth={2} stroke="var(--background)">
                     {stats.expenseBreakdown.map((e, i) => <Cell key={i} fill={e.color} />)}
                   </Pie>
                   <Tooltip formatter={(v: number) => `$${v.toLocaleString()}`} contentStyle={{ borderRadius: '12px', fontWeight: 'bold' }} />
@@ -576,11 +618,12 @@ const AdminAnalytics = () => {
         {/* Canchas */}
         {stats.courtBreakdown.length > 0 && (
           <div className="glass-card rounded-2xl p-5 flex flex-col hover:border-border/80 transition-colors shadow-sm">
-            <h3 className="font-bold text-sm mb-4">🏟️ Canchas</h3>
-            <div className="h-36 w-full mb-4">
+            <h3 className="font-bold text-sm mb-4 flex items-center gap-2"><MapPin className="w-4 h-4 text-primary" /> Canchas</h3>
+            <div className="h-40 w-full mb-4">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={stats.courtBreakdown} dataKey="value" cx="50%" cy="50%" innerRadius={45} outerRadius={70} strokeWidth={2} stroke="var(--background)">
+                  {/* FIX: nameKey="court" */}
+                  <Pie data={stats.courtBreakdown} dataKey="value" nameKey="court" cx="50%" cy="50%" innerRadius={50} outerRadius={80} strokeWidth={2} stroke="var(--background)">
                     {stats.courtBreakdown.map((e, i) => <Cell key={i} fill={e.color} />)}
                   </Pie>
                   <Tooltip formatter={(v: number) => `${v} turnos`} contentStyle={{ borderRadius: '12px', fontWeight: 'bold' }} />
@@ -601,11 +644,12 @@ const AdminAnalytics = () => {
         {/* Deportes */}
         {stats.sportBreakdown.length > 0 && (
           <div className="glass-card rounded-2xl p-5 flex flex-col hover:border-border/80 transition-colors shadow-sm">
-            <h3 className="font-bold text-sm mb-4">⚽ Deportes</h3>
-            <div className="h-36 w-full mb-4">
+            <h3 className="font-bold text-sm mb-4 flex items-center gap-2"><Dribbble className="w-4 h-4 text-primary" /> Deportes</h3>
+            <div className="h-40 w-full mb-4">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={stats.sportBreakdown} dataKey="value" cx="50%" cy="50%" innerRadius={45} outerRadius={70} strokeWidth={2} stroke="var(--background)">
+                  {/* FIX: nameKey="sport" */}
+                  <Pie data={stats.sportBreakdown} dataKey="value" nameKey="sport" cx="50%" cy="50%" innerRadius={50} outerRadius={80} strokeWidth={2} stroke="var(--background)">
                     {stats.sportBreakdown.map((e, i) => <Cell key={i} fill={e.color} />)}
                   </Pie>
                   <Tooltip formatter={(v: number) => `${v} turnos`} contentStyle={{ borderRadius: '12px', fontWeight: 'bold' }} />

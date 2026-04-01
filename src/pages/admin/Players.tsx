@@ -5,6 +5,7 @@ import { format, startOfMonth, endOfMonth, addMonths } from "date-fns";
 import { es } from "date-fns/locale";
 import { ChevronLeft, ChevronRight, Users, Search, Phone, Mail, CalendarDays, ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAllBookingsForPlayers } from "@/hooks/use-supabase-data";
 
 interface ClientData {
   name: string;
@@ -12,6 +13,7 @@ interface ClientData {
   email: string;
   totalBookings: number;
   cancelledBookings: number;
+  evaluableBookings: number; // <-- NUEVO
   totalSpent: number;
   lastBooking: string;
   attendanceRate: number;
@@ -32,9 +34,9 @@ const AdminPlayers = () => {
   const monthStart = format(startOfMonth(selectedDate), "yyyy-MM-dd");
   const monthEnd = format(endOfMonth(selectedDate), "yyyy-MM-dd");
 
-  const { data: monthBookings = [] } = useBookingsRange(monthStart, monthEnd);
+  const { data: monthBookings = [] } = useAllBookingsForPlayers(monthStart, monthEnd);
 
-  const clients = useMemo(() => {
+const clients = useMemo(() => {
     const map = new Map<string, ClientData>();
 
     monthBookings.forEach((b) => {
@@ -46,34 +48,60 @@ const AdminPlayers = () => {
         email: b.user_email || "",
         totalBookings: 0,
         cancelledBookings: 0,
+        evaluableBookings: 0, // <-- NUEVO
         totalSpent: 0,
         lastBooking: "",
         attendanceRate: 0,
       };
+      
+      // Siempre sumamos al total de turnos históricos (para la columna "Turnos")
       existing.totalBookings++;
-      if (b.status === "cancelled") existing.cancelledBookings++;
-      existing.totalSpent += b.total_price;
+      
+      // Determinamos si la reserva cuenta para medir asistencia (excluimos las que canceló el club)
+      if (!(b.status === "cancelled" && b.cancellation_reason === "club")) {
+          existing.evaluableBookings++;
+      }
+      
+      // Si se canceló y NO fue culpa del club (es decir, "no_show" o "client_excused") -> ES FALTA
+      if (b.status === "cancelled" && b.cancellation_reason !== "club") {
+          existing.cancelledBookings++;
+      }
+      
+      // Si la reserva no se canceló (se jugó normalmente), sumamos la plata gastada
+      if (b.status !== "cancelled") {
+          existing.totalSpent += b.total_price;
+      }
+      
+      // Actualizamos la última vez que reservó
       if (!existing.lastBooking || b.start_time > existing.lastBooking) existing.lastBooking = b.start_time;
       if (b.user_name && existing.name === "Sin nombre") existing.name = b.user_name;
       if (b.user_email && !existing.email) existing.email = b.user_email;
+      
       map.set(key, existing);
     });
 
     return Array.from(map.values())
       .map((c) => ({
         ...c,
-        attendanceRate: c.totalBookings > 0 ? Math.round(((c.totalBookings - c.cancelledBookings) / c.totalBookings) * 100) : 100,
+        // El porcentaje ahora usa los "evaluables" como base
+        attendanceRate: c.evaluableBookings > 0 
+            ? Math.round(((c.evaluableBookings - c.cancelledBookings) / c.evaluableBookings) * 100) 
+            : 100,
       }));
   }, [monthBookings]);
 
   const monthStats = useMemo(() => {
     const uniquePhones = new Set(monthBookings.map((b) => b.user_phone || b.user_name).filter(Boolean));
-    const cancelled = monthBookings.filter((b) => b.status === "cancelled").length;
-    const total = monthBookings.length;
+    
+    // Solo medimos la asistencia del mes en base a turnos que NO canceló el predio
+    const evaluableBookings = monthBookings.filter(b => !(b.status === "cancelled" && b.cancellation_reason === "club"));
+    const userFaults = evaluableBookings.filter(b => b.status === "cancelled").length;
+    const totalEvaluable = evaluableBookings.length;
+    
     return {
       uniqueClients: uniquePhones.size,
-      attendanceRate: total > 0 ? Math.round(((total - cancelled) / total) * 100) : 100,
-      totalBookings: total,
+      attendanceRate: totalEvaluable > 0 ? Math.round(((totalEvaluable - userFaults) / totalEvaluable) * 100) : 100,
+      totalBookings: monthBookings.length, // Total bruto para visualización
     };
   }, [monthBookings]);
 

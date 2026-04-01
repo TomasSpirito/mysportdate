@@ -145,6 +145,32 @@ export function useBookingsRange(startDate?: string, endDate?: string) {
   });
 }
 
+// NUEVO HOOK EXCLUSIVO PARA LA PESTAÑA JUGADORES (Trae todo, incluye canceladas)
+export function useAllBookingsForPlayers(startDate: string, endDate: string) {
+  const facilityId = useFacilityId();
+  return useQuery({
+    queryKey: ["all-bookings-players", facilityId, startDate, endDate],
+    queryFn: async () => {
+      if (!facilityId) return [];
+      const { data: fCourts } = await supabase.from("courts").select("id").eq("facility_id", facilityId);
+      const courtIds = fCourts?.map(c => c.id) || [];
+      if (courtIds.length === 0) return [];
+      
+      // LA CLAVE: No filtramos por status. Queremos TODAS para el CRM.
+      const { data, error } = await supabase
+        .from("bookings")
+        .select("*")
+        .in("court_id", courtIds)
+        .gte("start_time", `${startDate}T00:00:00`)
+        .lte("start_time", `${endDate}T23:59:59`);
+        
+      if (error) throw error;
+      return data as Booking[];
+    },
+    enabled: !!facilityId,
+  });
+}
+
 export function useBookingsByCourt(courtId?: string, date?: string) {
   return useQuery({
     queryKey: ["bookings", courtId, date],

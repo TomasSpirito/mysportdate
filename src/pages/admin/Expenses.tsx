@@ -300,7 +300,7 @@ const AdminExpenses = () => {
               <button onClick={() => setShowModal(false)} className="p-2 rounded-full hover:bg-muted transition-colors"><X className="w-5 h-5" /></button>
             </div>
             
-            <div className="overflow-y-auto custom-scrollbar pr-2 pb-2">
+            <div className="overflow-y-auto custom-scrollbar px-2 -mx-2 pt-2 pb-6">
                 
                 {step === "category" && (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
@@ -426,7 +426,7 @@ const AdminExpenses = () => {
                         {/* NUEVO: SECCIÓN DE MÉTODO DE PAGO */}
                         <div className="pt-2 border-t border-border/50">
                             <label className="text-xs font-bold text-muted-foreground mb-2 block">¿Cómo abonaste este gasto?</label>
-                            <div className="grid grid-cols-3 gap-2">
+                            <div className="grid grid-cols-3 gap-2 p-1 -m-1">
                                 {PAYMENT_METHODS.map(pm => (
                                     <button key={pm.value} type="button" onClick={() => setForm({...form, payment_method: pm.value})} 
                                         className={cn("flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl border text-[10px] sm:text-xs font-bold transition-all", 
@@ -440,8 +440,26 @@ const AdminExpenses = () => {
 
                         <div>
                             <label className="text-xs font-bold text-muted-foreground mb-1.5 block">Fecha de la transacción</label>
-                            <input type="date" className="w-full border border-border rounded-xl px-4 py-3 text-sm bg-background outline-none focus:border-primary transition-colors font-medium cursor-pointer" 
-                                value={form.expense_date} onChange={(e) => setForm({ ...form, expense_date: e.target.value })} />
+                            <div className="flex gap-2">
+                                {/* Botón Rápido: AYER (Ahora va primero a la izquierda) */}
+                                <button type="button" onClick={() => setForm({...form, expense_date: format(addDays(new Date(), -1), 'yyyy-MM-dd')})} 
+                                    className={cn("px-4 py-3 rounded-xl text-xs font-bold border-2 transition-all shadow-sm", form.expense_date === format(addDays(new Date(), -1), 'yyyy-MM-dd') ? "bg-primary/10 text-primary border-primary" : "bg-card text-muted-foreground border-border/50 hover:bg-muted")}>
+                                    Ayer
+                                </button>
+                                
+                                {/* Botón Rápido: HOY (Ahora va en el medio) */}
+                                <button type="button" onClick={() => setForm({...form, expense_date: format(new Date(), 'yyyy-MM-dd')})} 
+                                    className={cn("px-4 py-3 rounded-xl text-xs font-bold border-2 transition-all shadow-sm", form.expense_date === format(new Date(), 'yyyy-MM-dd') ? "bg-primary/10 text-primary border-primary" : "bg-card text-muted-foreground border-border/50 hover:bg-muted")}>
+                                    Hoy
+                                </button>
+                                
+                                {/* Input Nativo Estilizado */}
+                                <div className="relative flex-1">
+                                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary pointer-events-none" />
+                                    <input type="date" className="w-full border-2 border-border/50 rounded-xl pl-9 pr-3 py-3 text-sm bg-background outline-none focus:border-primary transition-colors font-bold cursor-pointer text-foreground shadow-sm" 
+                                        value={form.expense_date} onChange={(e) => setForm({ ...form, expense_date: e.target.value })} />
+                                </div>
+                            </div>
                         </div>
                         
                         <button onClick={handleSave} disabled={createExpense.isPending || updateExpense.isPending || (createBuffetPurchase as any)?.isPending} 
