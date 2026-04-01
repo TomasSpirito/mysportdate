@@ -1,12 +1,13 @@
 import { useState } from "react";
 import AdminLayout from "@/components/layout/AdminLayout";
 // IMPORTANTE: Sumamos useFacility a los hooks
-import { useFacility, useCourts, useBookings, useCreateBooking, useUpdateBooking, useDeleteBooking, useFacilitySchedules, type Booking } from "@/hooks/use-supabase-data";
+import { useFacility, useCourts, useBookings, useCancelledBookings, useCreateBooking, useUpdateBooking, useDeleteBooking, useFacilitySchedules, type Booking } from "@/hooks/use-supabase-data";
 import { cn } from "@/lib/utils";
 import { format, addDays, getDay } from "date-fns";
 import { es } from "date-fns/locale";
 import { ChevronLeft, ChevronRight, X, Phone, Mail, CalendarCheck, AlertCircle, CreditCard, Banknote, SmartphoneNfc } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+
 
 const typeLabels: Record<string, string> = { online: "Online", fixed: "Fijo", manual: "Manual" };
 
@@ -37,6 +38,7 @@ const AdminDashboard = () => {
   
   const { data: courts = [] } = useCourts();
   const { data: bookings = [] } = useBookings(dateStr);
+  const { data: cancelledBookings = [] } = useCancelledBookings(dateStr); // <-- NUEVO
   const { data: schedules = [] } = useFacilitySchedules();
   const updateBooking = useUpdateBooking();
   const deleteBooking = useDeleteBooking();
@@ -61,6 +63,8 @@ const AdminDashboard = () => {
   }
 
   const visibleCourts = courtFilter === "all" ? courts : courts.filter(c => c.id === courtFilter);
+
+  
 
   const getBooking = (courtId: string, hour: string) =>
       bookings.find((b) => { 
@@ -104,9 +108,16 @@ const AdminDashboard = () => {
 
   const handleCancel = async () => {
     if (!selectedBooking) return;
-    if (!confirm("¿Seguro que querés cancelar esta reserva? Se liberará la cancha.")) return;
-    await deleteBooking.mutateAsync(selectedBooking.id);
-    toast({ title: "Reserva cancelada" });
+    if (!confirm("¿Seguro que querés cancelar esta reserva? Se liberará la cancha pero quedará el registro en el fondo de la pantalla.")) return;
+    
+    // En vez de borrarla, le cambiamos el estado a "cancelled"
+    await updateBooking.mutateAsync({ 
+        id: selectedBooking.id, 
+        status: "cancelled",
+        cancelled_at: new Date().toISOString()
+    } as any);
+    
+    toast({ title: "Reserva cancelada y cancha liberada" });
     setSelectedBooking(null);
   };
 
@@ -415,6 +426,26 @@ const AdminDashboard = () => {
               {createBooking.isPending ? "Generando..." : "Agendar Reserva"}
             </button>
           </div>
+        </div>
+      )}
+      {/* SECCIÓN DE CANCELACIONES DEL DÍA */}
+      {cancelledBookings.length > 0 && (
+        <div className="mt-8 border-t border-destructive/20 pt-6">
+            <h3 className="font-bold text-destructive flex items-center gap-2 mb-4">
+                <AlertCircle className="w-5 h-5" /> Reservas Canceladas Hoy
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {cancelledBookings.map(b => (
+                    <div key={b.id} className="bg-destructive/5 border border-destructive/20 rounded-xl p-3 flex flex-col gap-1">
+                        <div className="flex justify-between items-start">
+                            <span className="font-bold text-sm">{b.user_name || "Sin nombre"}</span>
+                            <span className="text-xs bg-destructive text-white px-2 py-0.5 rounded-md font-bold">Liberada</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground">{getCourtName(b.court_id)} • {format(new Date(b.start_time), "HH:mm")} hs</span>
+                        <span className="text-[10px] text-muted-foreground italic mt-1">Seña retenida / devuelta: ${b.deposit_amount}</span>
+                    </div>
+                ))}
+            </div>
         </div>
       )}
     </AdminLayout>

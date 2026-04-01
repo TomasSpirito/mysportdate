@@ -87,11 +87,36 @@ export function useBookings(date?: string) {
     queryKey: ["bookings", facilityId, date],
     queryFn: async () => {
       if (!facilityId) return [];
-      // Get court IDs for this facility
       const { data: fCourts } = await supabase.from("courts").select("id").eq("facility_id", facilityId);
       const courtIds = fCourts?.map(c => c.id) || [];
       if (courtIds.length === 0) return [];
-      let q = supabase.from("bookings").select("*").in("court_id", courtIds);
+      
+      // ESTA LÍNEA ES LA CLAVE: Ignora las canceladas
+      let q = supabase.from("bookings").select("*").in("court_id", courtIds).neq("status", "cancelled");
+      
+      if (date) { q = q.gte("start_time", `${date}T00:00:00`).lt("start_time", `${date}T23:59:59`); }
+      const { data, error } = await q;
+      if (error) throw error;
+      return data as Booking[];
+    },
+    enabled: !!facilityId,
+  });
+}
+
+// NUEVA FUNCIÓN: Solo trae las canceladas para el registro del admin
+export function useCancelledBookings(date?: string) {
+  const facilityId = useFacilityId();
+  return useQuery({
+    queryKey: ["cancelled-bookings", facilityId, date],
+    queryFn: async () => {
+      if (!facilityId) return [];
+      const { data: fCourts } = await supabase.from("courts").select("id").eq("facility_id", facilityId);
+      const courtIds = fCourts?.map(c => c.id) || [];
+      if (courtIds.length === 0) return [];
+      
+      // SOLO TRAE LAS CANCELADAS
+      let q = supabase.from("bookings").select("*").in("court_id", courtIds).eq("status", "cancelled");
+      
       if (date) { q = q.gte("start_time", `${date}T00:00:00`).lt("start_time", `${date}T23:59:59`); }
       const { data, error } = await q;
       if (error) throw error;
