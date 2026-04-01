@@ -68,7 +68,7 @@ const Index = () => {
                     {facility?.logo_url ? (
                         <img src={facility.logo_url} alt="Logo" className="w-full h-full object-contain p-2" />
                     ) : (
-                        <span className="text-5xl font-black text-primary">{initials}</span>
+                        <img src="/favicon.png" alt="MySportdate" className="w-full h-full object-contain p-3 opacity-90" />
                     )}
                 </div>
                 <div className="flex-1 pb-2">

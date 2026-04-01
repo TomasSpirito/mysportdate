@@ -143,9 +143,7 @@ const Landing = () => {
       <header className="fixed top-0 w-full z-50 bg-[#0f1219]/80 backdrop-blur-2xl border-b border-white/[0.04]">
         <div className="max-w-7xl mx-auto flex items-center justify-between h-16 sm:h-[72px] px-5 sm:px-8">
           <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center text-white font-black text-base shadow-lg shadow-emerald-500/20">
-              S
-            </div>
+            <img src="/favicon.png" alt="Logo MySportdate" className="w-9 h-9 rounded-xl shadow-lg shadow-emerald-500/20 object-contain" />
             <span className="font-extrabold text-lg tracking-tight text-white">MySpordate</span>
           </div>
 
@@ -603,7 +601,7 @@ const Landing = () => {
       <footer className="border-t border-white/[0.04] py-10 bg-[#0a0d14]">
         <div className="max-w-7xl mx-auto px-5 sm:px-8 flex flex-col sm:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
-            <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center text-white font-extrabold text-sm">S</div>
+            <img src="/favicon.png" alt="Logo MySportdate" className="w-9 h-9 rounded-xl shadow-lg shadow-emerald-500/20 object-contain" />
             <span className="font-extrabold text-base text-white">MySpordate</span>
           </div>
           <div className="flex gap-6 text-xs font-semibold text-slate-600">

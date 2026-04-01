@@ -1,6 +1,6 @@
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Activity } from "lucide-react";
-import { motion } from "framer-motion"; // <-- 1. Importamos framer-motion
+import { ArrowLeft } from "lucide-react"; // Eliminamos 'Activity'
+import { motion } from "framer-motion";
 
 interface PlayerLayoutProps {
   children: React.ReactNode;
@@ -29,9 +29,12 @@ const PlayerLayout = ({ children, title, showBack = false, backTo }: PlayerLayou
           
           {/* Marca: MySportdate */}
           <Link to="/" className="flex items-center gap-2 min-w-0 group">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground shrink-0 group-hover:scale-105 transition-transform shadow-inner">
-              <Activity className="w-5 h-5" />
-            </div>
+            {/* AHORA: Tu nuevo logo en el Header */}
+            <img 
+              src="/favicon.png" 
+              alt="Logo MySportdate" 
+              className="w-8 h-8 rounded-lg object-contain shrink-0 group-hover:scale-105 transition-transform shadow-inner" 
+            />
             <span className="font-black text-lg tracking-tight truncate group-hover:text-primary transition-colors">
               MySportdate
             </span>
@@ -52,7 +55,7 @@ const PlayerLayout = ({ children, title, showBack = false, backTo }: PlayerLayou
         </div>
       </header>
 
-      {/* NUEVO: 2. Animamos el contenedor principal de todas las páginas */}
+      {/* Animamos el contenedor principal de todas las páginas */}
       <motion.main 
         initial={{ opacity: 0, y: 15 }} 
         animate={{ opacity: 1, y: 0 }} 
@@ -67,9 +70,12 @@ const PlayerLayout = ({ children, title, showBack = false, backTo }: PlayerLayou
         <div className="container max-w-5xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-6">
           
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground">
-              <Activity className="w-5 h-5" />
-            </div>
+            {/* AHORA: Tu nuevo logo en el Footer */}
+            <img 
+              src="/favicon.png" 
+              alt="Logo MySportdate" 
+              className="w-8 h-8 rounded-lg object-contain" 
+            />
             <span className="font-black text-lg tracking-tight">MySportdate</span>
           </div>
 
