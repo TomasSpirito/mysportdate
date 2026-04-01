@@ -69,13 +69,13 @@ const AdminSettings = () => {
       const linkAccount = async () => {
         try {
           // Llamamos a nuestra nueva Edge Function en el backend
-          const { data, error } = await supabase.functions.invoke('mp-connect', {
-            body: { 
-              code: code, 
-              redirectUri: "https://mysportdate-test.vercel.app/admin/settings",
-              facilityId: facility.id 
-            }
-          });
+        const { data, error } = await supabase.functions.invoke('mp-connect', {
+          body: { 
+            code: code, 
+            redirectUri: `${window.location.origin}/admin/settings`, // <-- CAMBIO ACÁ
+            facilityId: facility.id 
+          }
+        });
 
           if (error || !data?.success) throw new Error("Falló la vinculación en el servidor");
 
@@ -95,9 +95,8 @@ const AdminSettings = () => {
   }, [facility?.id]);
 
   // ─── LÓGICA DE MERCADO PAGO ───
-  // Generamos la URL directamente para usarla en un <a> tag y forzar el Deep Link en celulares
   const APP_ID = import.meta.env.VITE_MP_APP_ID;
-  const REDIRECT_URI = "https://mysportdate-test.vercel.app/admin/settings";
+  const REDIRECT_URI = `${window.location.origin}/admin/settings`; // <-- CAMBIO ACÁ
   const authUrl = `https://auth.mercadopago.com/authorization?client_id=${APP_ID}&response_type=code&platform_id=mp&state=link-account&redirect_uri=${REDIRECT_URI}`;
 
 
