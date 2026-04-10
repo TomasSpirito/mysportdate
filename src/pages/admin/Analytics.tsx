@@ -1,11 +1,11 @@
 import AdminLayout from "@/components/layout/AdminLayout";
-import { useBookingsRange, useCourts, useSports, useExpensesRange, useFacilitySchedules, useBuffetSalesRange } from "@/hooks/use-supabase-data";
+import { useBookingsRange, useCourts, useSports, useExpensesRange, useFacilitySchedules, useBuffetSalesRange, useHolidays } from "@/hooks/use-supabase-data";
 import { useMemo, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { format, subDays, startOfMonth, endOfMonth, addMonths, getDay, startOfDay } from "date-fns";
 import { es } from "date-fns/locale";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, AreaChart, Area, CartesianGrid, LineChart, Line } from "recharts";
-import { ChevronLeft, ChevronRight, TrendingDown, Users, Coffee, AlertCircle, Wallet, Smartphone, Target, XCircle, BarChart3, Search, Download, CalendarCheck, MapPin, Dribbble } from "lucide-react";
+import { ChevronLeft, ChevronRight, TrendingDown, Users, Coffee, AlertCircle, Wallet, Smartphone, Target, XCircle, BarChart3, Search, Download, CalendarCheck, MapPin, Dribbble, PartyPopper } from "lucide-react";
 import { cn } from "@/lib/utils";
 import * as XLSX from 'xlsx';
 import html2canvas from 'html2canvas';
@@ -40,12 +40,13 @@ const AdminAnalytics = () => {
   const { data: sports = [] } = useSports();
   const { data: schedules = [] } = useFacilitySchedules();
   const { data: buffetSales = [] } = useBuffetSalesRange(monthStartStr, monthEndStr);
+  const { data: holidays = [] } = useHolidays(); // <-- NUEVO: Traemos feriados
+
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
 
   const stats = useMemo(() => {
     const totalBookings = bookings.length;
     const daysInMonth = endOfMonth(selectedDate).getDate();
-    const isCurrentMonth = format(selectedDate, "yyyy-MM") === format(new Date(), "yyyy-MM");
-    const todayDayNumber = new Date().getDate();
 
     // 1. KPIs FINANCIEROS Y OCUPACIÓN
     let totalSlots = 0;
@@ -62,6 +63,18 @@ const AdminAnalytics = () => {
     const occupancyRate = totalSlots > 0 ? Math.round((totalBookings / totalSlots) * 100) : 0;
 
     const totalRevenue = bookings.reduce((s, b) => s + b.total_price, 0);
+    
+    // --- LÓGICA NUEVA PARA EVENTOS ---
+    const eventBookings = bookings.filter(b => courts.find(c => c.id === b.court_id)?.is_event);
+    const eventRevenue = eventBookings.reduce((s, b) => s + b.total_price, 0);
+    const sportRevenue = totalRevenue - eventRevenue;
+
+    const revenueTypeBreakdown = [
+        { name: "Deportes", value: sportRevenue, color: "#10b981", pct: totalRevenue > 0 ? Math.round((sportRevenue/totalRevenue)*100) : 0 },
+        { name: "Eventos", value: eventRevenue, color: "#8b5cf6", pct: totalRevenue > 0 ? Math.round((eventRevenue/totalRevenue)*100) : 0 }
+    ].filter(r => r.value > 0).sort((a,b) => b.value - a.value);
+    // ---------------------------------
+
     const totalDeposits = bookings.reduce((s, b) => s + b.deposit_amount, 0);
     const pendingPayments = totalRevenue - totalDeposits;
     const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
@@ -72,7 +85,7 @@ const AdminAnalytics = () => {
     // 2. DESGLOSES CATEGÓRICOS
     const pmMap: Record<string, number> = { efectivo: 0, mercadopago: 0, tarjeta: 0 };
     bookings.forEach(b => { 
-        const pm = (b as any).payment_method; // FIX TIPO TS
+        const pm = (b as any).payment_method;
         if (pm && b.deposit_amount > 0) pmMap[pm] = (pmMap[pm] || 0) + b.deposit_amount; 
     });
     buffetSales.forEach(s => { const pm = (s as any).payment_method; if (pm) pmMap[pm] = (pmMap[pm] || 0) + s.total; });
@@ -107,9 +120,9 @@ const AdminAnalytics = () => {
 
     const courtProfitability = courts.map(c => ({
         name: c.name,
-        sport: sports.find(s => s.id === c.sport_id)?.name || "",
+        sport: sports.find(s => s.id === c.sport_id)?.name || (c.is_event ? "Eventos" : ""),
         revenue: courtRevenue[c.id] || 0,
-        color: sportColors[sports.findIndex(s => s.id === c.sport_id) % sportColors.length]
+        color: c.is_event ? "#8b5cf6" : sportColors[sports.findIndex(s => s.id === c.sport_id) % sportColors.length]
     })).sort((a,b) => b.revenue - a.revenue).slice(0, 10); 
 
     // 3. HEATMAP Y TEMPORALES
@@ -188,7 +201,7 @@ const AdminAnalytics = () => {
     const totalCancelled = bookings.filter((b) => b.status === "cancelled").length;
     const cancelRate = totalBookings > 0 ? Math.round((totalCancelled / totalBookings) * 100) : 0;
 
-    // 5. ESTADO DE RESERVAS (NUEVO GRÁFICO)
+    // 5. ESTADO DE RESERVAS
     const statusMap = { played: 0, user_cancel: 0, club_cancel: 0 };
     bookings.forEach(b => {
         if (b.status !== 'cancelled') statusMap.played++;
@@ -201,9 +214,13 @@ const AdminAnalytics = () => {
         { name: "Canc. Club", value: statusMap.club_cancel, color: "#f97316", pct: totalBookings > 0 ? Math.round((statusMap.club_cancel / totalBookings) * 100) : 0 }
     ].filter(s => s.value > 0).sort((a,b) => b.value - a.value);
 
-    // 👇 AQUÍ SE ACTUALIZA EL RETURN PARA INCLUIR statusBreakdown 👇
-    return { totalBookings, occupancyRate, totalRevenue, pendingPayments, totalExpenses, netProfit, avgTicket, sportBreakdown, courtBreakdown, heatmap, heatmapMax, monthlyFlow, expenseBreakdown, totalClients, cancelRate, buffetTotal, paymentBreakdown, originBreakdown, courtProfitability, occupancyTrend, statusBreakdown };
-  }, [bookings, courts, sports, selectedDate, expenses, schedules, buffetSales]);
+    return { 
+      totalBookings, occupancyRate, totalRevenue, pendingPayments, totalExpenses, netProfit, avgTicket, 
+      sportBreakdown, courtBreakdown, heatmap, heatmapMax, monthlyFlow, expenseBreakdown, totalClients, 
+      cancelRate, buffetTotal, paymentBreakdown, originBreakdown, courtProfitability, occupancyTrend, 
+      statusBreakdown, sportRevenue, eventRevenue, revenueTypeBreakdown // <-- Agregados acá
+    };
+  }, [bookings, courts, sports, selectedDate, expenses, schedules, buffetSales, holidays]); // <-- Agregamos holidays al dep array
 
   const getHeatColor = (count: number, max: number) => {
     if (count === 0) return "bg-muted";
@@ -237,11 +254,11 @@ const AdminAnalytics = () => {
   const handleExportReport = () => {
       const wb = XLSX.utils.book_new();
 
-      // Resumen de KPIs Generales
       const kpis = [
         { Metrica: "Ocupación Promedio", Valor: `${stats.occupancyRate}%` },
         { Metrica: "Total Reservas", Valor: stats.totalBookings },
-        { Metrica: "Ingresos Canchas", Valor: stats.totalRevenue },
+        { Metrica: "Ingresos Canchas", Valor: stats.sportRevenue },
+        { Metrica: "Ingresos Eventos", Valor: stats.eventRevenue },
         { Metrica: "Ingresos Buffet", Valor: stats.buffetTotal },
         { Metrica: "Egresos Totales", Valor: stats.totalExpenses },
         { Metrica: "Ganancia Neta", Valor: stats.netProfit },
@@ -251,7 +268,6 @@ const AdminAnalytics = () => {
       ];
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(kpis), "KPIs Mensuales");
 
-      // Detalle de Medios de Pago
       const pagosData = stats.paymentBreakdown.map(p => ({
           Medio_de_Cobro: p.name,
           Monto_Recaudado: p.value,
@@ -259,17 +275,12 @@ const AdminAnalytics = () => {
       }));
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pagosData), "Medios de Cobro");
 
-      // Descargar el archivo
       const periodName = format(selectedDate, "MMMM_yyyy", { locale: es });
       XLSX.writeFile(wb, `Reporte_Gerencial_${periodName}.xlsx`);
       toast({ title: "Reporte descargado con éxito 📊" });
   };
 
-  // Estado para mostrar un "Cargando..." mientras saca la foto
-  const [isExportingPDF, setIsExportingPDF] = useState(false);
-
   const handleExportPDF = async () => {
-      // Buscamos el contenedor que tiene todos los gráficos
       const element = document.getElementById('pdf-content');
       if (!element) return;
 
@@ -277,27 +288,22 @@ const AdminAnalytics = () => {
       toast({ title: "Generando PDF, aguardá unos segundos... 📸" });
 
       try {
-          // 1. Le saca una "foto" de alta calidad a ese contenedor HTML
           const canvas = await html2canvas(element, {
-              scale: 2, // Mejora la resolución para pantallas retina
-              useCORS: true, // Por si tenés imágenes de otros dominios
-              backgroundColor: '#ffffff' // Fondo blanco garantizado
+              scale: 2, 
+              useCORS: true, 
+              backgroundColor: '#ffffff'
           });
 
           const imgData = canvas.toDataURL('image/png');
-
-          // 2. Creamos un PDF con el tamaño EXACTO de la foto para que no se corte nada
           const pdf = new jsPDF({
               orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
               unit: 'px',
               format: [canvas.width, canvas.height]
           });
 
-          // 3. Pegamos la foto y descargamos
           pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
           const periodName = format(selectedDate, "MMMM_yyyy", { locale: es });
           pdf.save(`Reporte_Visual_${periodName}.pdf`);
-
           toast({ title: "PDF descargado con éxito 📄" });
       } catch (error) {
           console.error(error);
@@ -307,8 +313,6 @@ const AdminAnalytics = () => {
       }
   };
 
-  
-
   return (
     <AdminLayout>
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -317,11 +321,9 @@ const AdminAnalytics = () => {
             <p className="text-sm text-muted-foreground">Rendimiento, control financiero y toma de decisiones</p>
         </div>
         <div className="flex gap-2">
-            {/* BOTÓN EXCEL */}
             <button onClick={handleExportReport} className="flex items-center justify-center gap-2 bg-[#107c41] text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-[#0e6e39] transition-colors shadow-sm">
                 <FileSpreadsheet className="w-4 h-4" /> Excel
             </button>
-            {/* BOTÓN PDF */}
             <button onClick={handleExportPDF} disabled={isExportingPDF} className="flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-bold hover:opacity-90 transition-opacity shadow-sm disabled:opacity-50">
                 {isExportingPDF ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />} 
                 {isExportingPDF ? "Generando..." : "Descargar PDF"}
@@ -329,7 +331,6 @@ const AdminAnalytics = () => {
         </div>
       </div>
 
-      {/* NAVEGACIÓN MES */}
       <div className="flex items-center gap-3 mb-6 flex-wrap">
         <button onClick={() => setSelectedDate(addMonths(selectedDate, -1))} className="p-2 rounded-lg border border-border hover:bg-muted transition-colors"><ChevronLeft className="w-4 h-4" /></button>
         <span className="font-bold capitalize min-w-[140px] text-center">{format(selectedDate, "MMMM yyyy", { locale: es })}</span>
@@ -337,11 +338,10 @@ const AdminAnalytics = () => {
         <button onClick={() => setSelectedDate(new Date())} className="bg-primary text-primary-foreground px-4 py-2 rounded-full text-xs font-bold hover:opacity-90 transition-opacity ml-auto shadow-sm">Mes Actual</button>
       </div>
 
-      {/* 👇 ACÁ EMPIEZA EL CONTENEDOR DE LA "FOTO" 👇 */}
       <div id="pdf-content" className="bg-background pb-4">
 
-      {/* FILA 1: KPIs FINANCIEROS (Oro) */}
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-4">
+      {/* FILA 1: KPIs FINANCIEROS Y EVENTOS */}
+      <div className="grid grid-cols-2 lg:grid-cols-7 gap-3 mb-4">
         <div className="glass-card rounded-2xl p-4 sm:p-5 border-l-4 border-l-info">
           <p className="text-[10px] font-bold text-muted-foreground mb-1.5 uppercase tracking-wider leading-relaxed">Ocupación</p>
           <p className="text-2xl sm:text-3xl font-black text-info leading-relaxed py-0.5">{stats.occupancyRate}%</p>
@@ -351,8 +351,12 @@ const AdminAnalytics = () => {
           <p className="text-2xl sm:text-3xl font-black text-foreground leading-relaxed py-0.5">{stats.totalBookings}</p>
         </div>
         <div className="glass-card rounded-2xl p-4 sm:p-5 border-l-4 border-l-primary">
-          <p className="text-[10px] font-bold text-muted-foreground mb-1.5 uppercase tracking-wider leading-relaxed">Ingr. Canchas</p>
-          <p className="text-2xl sm:text-3xl font-black text-primary leading-relaxed py-0.5" title={`$${stats.totalRevenue.toLocaleString()}`}>${(stats.totalRevenue / 1000).toFixed(0)}k</p>
+          <p className="text-[10px] font-bold text-muted-foreground mb-1.5 uppercase tracking-wider leading-relaxed">Ingr. Deportes</p>
+          <p className="text-2xl sm:text-3xl font-black text-primary leading-relaxed py-0.5" title={`$${stats.sportRevenue.toLocaleString()}`}>${(stats.sportRevenue / 1000).toFixed(0)}k</p>
+        </div>
+        <div className="glass-card rounded-2xl p-4 sm:p-5 border-l-4 border-l-purple-500">
+          <p className="text-[10px] font-bold text-muted-foreground mb-1.5 uppercase tracking-wider leading-relaxed">Ingr. Eventos</p>
+          <p className="text-2xl sm:text-3xl font-black text-purple-500 leading-relaxed py-0.5" title={`$${stats.eventRevenue.toLocaleString()}`}>${(stats.eventRevenue / 1000).toFixed(0)}k</p>
         </div>
         <div className="glass-card rounded-2xl p-4 sm:p-5 border-l-4 border-l-orange-500">
           <p className="text-[10px] font-bold text-muted-foreground mb-1.5 uppercase tracking-wider leading-relaxed">Buffet</p>
@@ -423,26 +427,26 @@ const AdminAnalytics = () => {
               <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v/1000}k`} />
               <Tooltip content={<CustomTooltip />} />
               <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 600 }}/>
-              <Area type="monotone" dataKey="Ingresos" stroke="#00a650" strokeWidth={3} fillOpacity={1} fill="url(#colorIngresos)" activeDot={{ r: 6, strokeWidth: 0 }} />
-              <Area type="monotone" dataKey="Egresos" stroke="#ef4444" strokeWidth={3} fillOpacity={1} fill="url(#colorEgresos)" activeDot={{ r: 6, strokeWidth: 0 }} />
+              <Area isAnimationActive={!isExportingPDF} type="monotone" dataKey="Ingresos" stroke="#00a650" strokeWidth={3} fillOpacity={1} fill="url(#colorIngresos)" activeDot={{ r: 6, strokeWidth: 0 }} />
+              <Area isAnimationActive={!isExportingPDF} type="monotone" dataKey="Egresos" stroke="#ef4444" strokeWidth={3} fillOpacity={1} fill="url(#colorEgresos)" activeDot={{ r: 6, strokeWidth: 0 }} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* FILA 4: GRÁFICOS DE VALOR AGREGADO POR CATEGORÍA (NADA SE ESTIRA) */}
+      {/* FILA 4: GRÁFICOS DE VALOR AGREGADO POR CATEGORÍA */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         
         {/* Top 10 Canchas Rentables */}
         <div className="glass-card rounded-2xl p-5 sm:p-6 shadow-sm">
-            <h3 className="font-bold text-base mb-6 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-primary" /> Top 10 Canchas más Rentables del Mes</h3>
+            <h3 className="font-bold text-base mb-6 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-primary" /> Top 10 Espacios Rentables</h3>
             <div className="h-[300px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={stats.courtProfitability} layout="vertical" margin={{ top: 0, right: 30, left: 40, bottom: 0 }}>
                         <XAxis type="number" tickFormatter={(v) => `$${v/1000}k`} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
                         <YAxis dataKey="name" type="category" tick={{fontSize: 10, fontWeight: 600}} axisLine={false} tickLine={false} width={80} />
                         <Tooltip formatter={(value: number) => [`$${value.toLocaleString()}`, "Ingreso Total"]} contentStyle={{borderRadius: '12px', fontWeight: 'bold'}} />
-                        <Bar dataKey="revenue" fill="hsl(var(--primary))" radius={[0, 5, 5, 0]}>
+                        <Bar isAnimationActive={!isExportingPDF} dataKey="revenue" fill="hsl(var(--primary))" radius={[0, 5, 5, 0]}>
                             {stats.courtProfitability.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={entry.color} fillOpacity={0.8} />
                             ))}
@@ -462,7 +466,7 @@ const AdminAnalytics = () => {
                         <XAxis dataKey="week" tick={{fontSize: 11, fontWeight: 600}} axisLine={false} tickLine={false} dy={10} />
                         <YAxis tickFormatter={(v) => `${v}%`} tick={{fontSize: 10}} axisLine={false} tickLine={false} domain={[0, 100]} />
                         <Tooltip content={<CustomTooltip />} />
-                        <Line type="monotone" dataKey="Ocupación" stroke="hsl(var(--primary))" strokeWidth={4} dot={{r: 6, strokeWidth: 0, fill: "hsl(var(--primary))"}} activeDot={{r: 8, strokeWidth: 0}} />
+                        <Line isAnimationActive={!isExportingPDF} type="monotone" dataKey="Ocupación" stroke="hsl(var(--primary))" strokeWidth={4} dot={{r: 6, strokeWidth: 0, fill: "hsl(var(--primary))"}} activeDot={{r: 8, strokeWidth: 0}} />
                     </LineChart>
                 </ResponsiveContainer>
             </div>
@@ -490,8 +494,17 @@ const AdminAnalytics = () => {
                   <td className="text-xs font-mono text-muted-foreground py-2 pr-4 font-bold text-right border-r border-border/50">{hour}:00</td>
                   {DAYS_SHORT.map((_, dayIdx) => {
                     const count = stats.heatmap[`${dayIdx}-${hour}`] || 0;
+                    
+                    // NUEVO: Verificamos si este día puntual es feriado en este mes (Lógica aproximada visual)
+                    // Buscamos cualquier feriado que caiga en este día de la semana para este mes
+                    const isHoliday = holidays.some(h => {
+                        const d = new Date(h.date + "T12:00:00");
+                        return d.getMonth() === selectedDate.getMonth() && (getDay(d) + 6) % 7 === dayIdx;
+                    });
+
                     return (
-                      <td key={dayIdx} className="p-1 px-1.5">
+                      <td key={dayIdx} className="p-1 px-1.5 relative">
+                        {isHoliday && count > 0 && <span className="absolute top-1 right-2 text-[8px]" title="Feriado">⭐</span>}
                         <div className={cn("w-full h-11 rounded-lg flex items-center justify-center text-[11px] font-black transition-all hover:scale-110", getHeatColor(count, stats.heatmapMax))} title={`${count} reservas`}>
                           {count > 0 && count}
                         </div>
@@ -507,13 +520,39 @@ const AdminAnalytics = () => {
             <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-muted border border-border"/> 0 turnos</div>
             <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-green-100 text-green-800"/> Baja</div>
             <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-yellow-100 text-yellow-800"/> Media</div>
-            <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-red-500"/> Alta ocupación</div>
+            <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-red-500"/> Alta</div>
+            <div className="flex items-center gap-1 ml-4">⭐ Feriado</div>
         </div>
       </div>
 
-      {/* FILA 6: LOS 6 GRÁFICOS CATEGÓRICOS AGRUPADOS (GRILLA 3x2 PERFECTA) */}
+      {/* FILA 6: LOS GRÁFICOS CATEGÓRICOS AGRUPADOS */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         
+        {/* NUEVO: Eventos vs Deportes */}
+        {stats.revenueTypeBreakdown.length > 0 && (
+          <div className="glass-card rounded-2xl p-5 flex flex-col hover:border-border/80 transition-colors shadow-sm">
+            <h3 className="font-bold text-sm mb-4 flex items-center gap-2"><PartyPopper className="w-4 h-4 text-primary" /> Deportes vs Eventos</h3>
+            <div className="h-40 w-full mb-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie isAnimationActive={!isExportingPDF} data={stats.revenueTypeBreakdown} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} strokeWidth={2} stroke="var(--background)">
+                    {stats.revenueTypeBreakdown.map((e, i) => <Cell key={i} fill={e.color} />)}
+                  </Pie>
+                  <Tooltip formatter={(v: number) => `$${v.toLocaleString()}`} contentStyle={{ borderRadius: '12px', fontWeight: 'bold' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="space-y-2.5 mt-auto">
+              {stats.revenueTypeBreakdown.map((pm) => (
+                <div key={pm.name} className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 pr-2"><div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: pm.color }} /><span className="font-semibold leading-relaxed py-0.5">{pm.name}</span></div>
+                  <div className="flex gap-2 shrink-0 items-center"><span className="font-black text-muted-foreground leading-relaxed">{pm.pct}%</span><span className="font-black w-10 text-right leading-relaxed">${(pm.value/1000).toFixed(1)}k</span></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Origen Reservas */}
         {stats.originBreakdown.length > 0 && (
           <div className="glass-card rounded-2xl p-5 flex flex-col hover:border-border/80 transition-colors shadow-sm">
@@ -521,7 +560,7 @@ const AdminAnalytics = () => {
             <div className="h-40 w-full mb-4">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={stats.originBreakdown} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} strokeWidth={2} stroke="var(--background)">
+                  <Pie isAnimationActive={!isExportingPDF} data={stats.originBreakdown} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} strokeWidth={2} stroke="var(--background)">
                     {stats.originBreakdown.map((e, i) => <Cell key={i} fill={e.color} />)}
                   </Pie>
                   <Tooltip formatter={(v: number) => `${v} turnos`} contentStyle={{ borderRadius: '12px', fontWeight: 'bold' }} />
@@ -546,7 +585,7 @@ const AdminAnalytics = () => {
             <div className="h-40 w-full mb-4">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={stats.paymentBreakdown} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} strokeWidth={2} stroke="var(--background)">
+                  <Pie isAnimationActive={!isExportingPDF} data={stats.paymentBreakdown} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} strokeWidth={2} stroke="var(--background)">
                     {stats.paymentBreakdown.map((e, i) => <Cell key={i} fill={e.color} />)}
                   </Pie>
                   <Tooltip formatter={(v: number) => `$${v.toLocaleString()}`} contentStyle={{ borderRadius: '12px', fontWeight: 'bold' }} />
@@ -564,14 +603,14 @@ const AdminAnalytics = () => {
           </div>
         )}
 
-        {/* NUEVO: Estado de Reservas */}
+        {/* Estado de Reservas */}
         {stats.statusBreakdown.length > 0 && (
           <div className="glass-card rounded-2xl p-5 flex flex-col hover:border-border/80 transition-colors shadow-sm">
             <h3 className="font-bold text-sm mb-4 flex items-center gap-2"><CalendarCheck className="w-4 h-4 text-primary" /> Estado Reservas</h3>
             <div className="h-40 w-full mb-4">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={stats.statusBreakdown} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} strokeWidth={2} stroke="var(--background)">
+                  <Pie isAnimationActive={!isExportingPDF} data={stats.statusBreakdown} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} strokeWidth={2} stroke="var(--background)">
                     {stats.statusBreakdown.map((e, i) => <Cell key={i} fill={e.color} />)}
                   </Pie>
                   <Tooltip formatter={(v: number) => `${v} turnos`} contentStyle={{ borderRadius: '12px', fontWeight: 'bold' }} />
@@ -596,8 +635,7 @@ const AdminAnalytics = () => {
             <div className="h-40 w-full mb-4">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  {/* FIX: nameKey="category" */}
-                  <Pie data={stats.expenseBreakdown} dataKey="value" nameKey="category" cx="50%" cy="50%" innerRadius={50} outerRadius={80} strokeWidth={2} stroke="var(--background)">
+                  <Pie isAnimationActive={!isExportingPDF} data={stats.expenseBreakdown} dataKey="value" nameKey="category" cx="50%" cy="50%" innerRadius={50} outerRadius={80} strokeWidth={2} stroke="var(--background)">
                     {stats.expenseBreakdown.map((e, i) => <Cell key={i} fill={e.color} />)}
                   </Pie>
                   <Tooltip formatter={(v: number) => `$${v.toLocaleString()}`} contentStyle={{ borderRadius: '12px', fontWeight: 'bold' }} />
@@ -615,61 +653,8 @@ const AdminAnalytics = () => {
           </div>
         )}
 
-        {/* Canchas */}
-        {stats.courtBreakdown.length > 0 && (
-          <div className="glass-card rounded-2xl p-5 flex flex-col hover:border-border/80 transition-colors shadow-sm">
-            <h3 className="font-bold text-sm mb-4 flex items-center gap-2"><MapPin className="w-4 h-4 text-primary" /> Canchas</h3>
-            <div className="h-40 w-full mb-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  {/* FIX: nameKey="court" */}
-                  <Pie data={stats.courtBreakdown} dataKey="value" nameKey="court" cx="50%" cy="50%" innerRadius={50} outerRadius={80} strokeWidth={2} stroke="var(--background)">
-                    {stats.courtBreakdown.map((e, i) => <Cell key={i} fill={e.color} />)}
-                  </Pie>
-                  <Tooltip formatter={(v: number) => `${v} turnos`} contentStyle={{ borderRadius: '12px', fontWeight: 'bold' }} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="space-y-2.5 mt-auto">
-              {stats.courtBreakdown.slice(0, 3).map((c) => (
-                <div key={c.court} className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2 pr-2"><div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: c.color }} /><span className="font-semibold leading-relaxed py-0.5">{c.court}</span></div>
-                  <div className="flex gap-2 shrink-0 items-center"><span className="font-black text-muted-foreground leading-relaxed">{c.percentage}%</span><span className="font-black w-8 text-right leading-relaxed">{c.value}</span></div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Deportes */}
-        {stats.sportBreakdown.length > 0 && (
-          <div className="glass-card rounded-2xl p-5 flex flex-col hover:border-border/80 transition-colors shadow-sm">
-            <h3 className="font-bold text-sm mb-4 flex items-center gap-2"><Dribbble className="w-4 h-4 text-primary" /> Deportes</h3>
-            <div className="h-40 w-full mb-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  {/* FIX: nameKey="sport" */}
-                  <Pie data={stats.sportBreakdown} dataKey="value" nameKey="sport" cx="50%" cy="50%" innerRadius={50} outerRadius={80} strokeWidth={2} stroke="var(--background)">
-                    {stats.sportBreakdown.map((e, i) => <Cell key={i} fill={e.color} />)}
-                  </Pie>
-                  <Tooltip formatter={(v: number) => `${v} turnos`} contentStyle={{ borderRadius: '12px', fontWeight: 'bold' }} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="space-y-2.5 mt-auto">
-              {stats.sportBreakdown.slice(0, 3).map((s) => (
-                <div key={s.sport} className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2 pr-2"><div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: s.color }} /><span className="font-semibold leading-relaxed py-0.5">{s.sport}</span></div>
-                  <div className="flex gap-2 shrink-0 items-center"><span className="font-black text-muted-foreground leading-relaxed">{s.percentage}%</span><span className="font-black w-8 text-right leading-relaxed">{s.value}</span></div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
       </div>
       </div> 
-      {/* 👆 ACÁ TERMINA EL CONTENEDOR DE LA "FOTO" 👆 */}
     </AdminLayout>
   );
 };

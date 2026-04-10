@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import AdminLayout from "@/components/layout/AdminLayout";
-import { useFacility, useUpdateFacility, useFacilitySchedules, useUpsertFacilitySchedule, useUploadFacilityImage, type Facility } from "@/hooks/use-supabase-data";
-import { Clock, MapPin, Phone, Save, Mail, MessageCircle, Link2, Copy, Check, Image as ImageIcon, Instagram, Map, Info, Star, Upload, Plus, Percent, ShieldCheck, Banknote, Timer, PartyPopper } from "lucide-react";
+import { useFacility, useUpdateFacility, useFacilitySchedules, useUpsertFacilitySchedule, useUploadFacilityImage, useHolidays, useCreateHoliday, useDeleteHoliday, type Facility } from "@/hooks/use-supabase-data";
+import { Clock, MapPin, Phone, Save, Mail, MessageCircle, Link2, Copy, Check, Image as ImageIcon, Instagram, Map, Info, Star, Upload, Plus, Percent, ShieldCheck, Banknote, Timer, PartyPopper, CalendarCheck, X, Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
-
 // ASUMIMOS QUE TU CLIENTE DE SUPABASE ESTÁ ACÁ (ajustá la ruta si es distinta en tu proyecto)
 import { supabase } from "@/integrations/supabase/client";
 
@@ -20,6 +23,10 @@ type ExtendedFacility = Facility & {
   default_event_duration?: number;
   default_event_includes?: string;
   default_event_price?: number;
+  holiday_open_time?: string;
+  holiday_close_time?: string;
+  event_open_time?: string;
+  event_close_time?: string;
 };
 
 const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
@@ -51,46 +58,98 @@ const AdminSettings = () => {
       deposit_percentage: 50,
       mp_connected: false,
       cancellation_window_hours: 12,
-      // --- ESTADO INICIAL DE EVENTOS ---
       has_events: false,
       default_event_duration: 180,
       default_event_includes: "",
       default_event_price: 0,
+      holiday_open_time: "12:00",
+      holiday_close_time: "23:00",
+      event_open_time: "12:00",
+      event_close_time: "23:00",
   });
   
   const [localSchedules, setLocalSchedules] = useState<{ day_of_week: number; is_open: boolean; open_time: string; close_time: string }[]>([]);
   const [customAmenity, setCustomAmenity] = useState("");
-  const [customEventAmenity, setCustomEventAmenity] = useState(""); // <-- NUEVO ESTADO
+  const [customEventAmenity, setCustomEventAmenity] = useState("");
+
+  // --- ESTADOS Y FUNCIONES PARA FERIADOS REALES ---
+  const [holidayModalOpen, setHolidayModalOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false); // Estado para controlar el cuadrito del calendario
+  const [holidayToDelete, setHolidayToDelete] = useState<{id: string, label: string} | null>(null); // Estado para el modal de borrado
+
+  const { data: holidays = [] } = useHolidays();
+  const createHoliday = useCreateHoliday();
+  const deleteHoliday = useDeleteHoliday();
+
+  const [newHoliday, setNewHoliday] = useState<{ date: Date | undefined, label: string, is_closed: boolean, open_time: string, close_time: string }>({
+      date: undefined,
+      label: "",
+      is_closed: false,
+      open_time: "12:00",
+      close_time: "23:00"
+  });
+
+  const handleAddHoliday = async () => {
+      if (!newHoliday.date || !newHoliday.label.trim()) {
+          toast({ title: "Atención", description: "Completá el nombre y seleccioná una fecha.", variant: "destructive" });
+          return;
+      }
+      
+      try {
+          await createHoliday.mutateAsync({
+              date: format(newHoliday.date, "yyyy-MM-dd"), // Transformamos la fecha a formato SQL
+              label: newHoliday.label,
+              is_closed: newHoliday.is_closed,
+              custom_open_time: newHoliday.open_time,
+              custom_close_time: newHoliday.close_time
+          });
+          
+          toast({ title: "Feriado agendado con éxito ✅" });
+          setHolidayModalOpen(false);
+          setNewHoliday({ date: undefined, label: "", is_closed: false, open_time: facilityForm.holiday_open_time || "12:00", close_time: facilityForm.holiday_close_time || "23:00" });
+      } catch (err: any) {
+          toast({ title: "Error al guardar", description: err.message, variant: "destructive" });
+      }
+  };
+
+  // Función para ejecutar el borrado desde nuestro modal lindo
+  const executeDeleteHoliday = async () => {
+      if (!holidayToDelete) return;
+      try {
+          await deleteHoliday.mutateAsync(holidayToDelete.id);
+          toast({ title: "Feriado eliminado" });
+          setHolidayToDelete(null); // Cerramos el modal
+      } catch (err) {
+          toast({ title: "Error al eliminar", variant: "destructive" });
+      }
+  };
+  // ---------------------------------------
 
   const logoInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
   const publicUrl = facility?.slug ? `${window.location.origin}/predio/${facility.slug}` : "";
 
-  // ─── EFECTO: CAPTURAR EL CÓDIGO DE MERCADO PAGO DE LA URL ───
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get("code");
 
     if (code && facility?.id) {
       setIsLinkingMP(true);
-      // Limpiamos la URL para que no quede el código feo a la vista
       window.history.replaceState({}, document.title, window.location.pathname);
       
       const linkAccount = async () => {
         try {
-          // Llamamos a nuestra nueva Edge Function en el backend
         const { data, error } = await supabase.functions.invoke('mp-connect', {
           body: { 
             code: code, 
-            redirectUri: `${window.location.origin}/admin/settings`, // <-- CAMBIO ACÁ
+            redirectUri: `${window.location.origin}/admin/settings`,
             facilityId: facility.id 
           }
         });
 
           if (error || !data?.success) throw new Error("Falló la vinculación en el servidor");
 
-          // Si el servidor tuvo éxito y guardó el token, actualizamos la vista
           setFacilityForm(prev => ({ ...prev, mp_connected: true }));
           toast({ title: "¡Mercado Pago vinculado! ✅", description: "Ya podés recibir pagos automáticos en tu cuenta." });
         } catch (err: unknown) {
@@ -105,11 +164,9 @@ const AdminSettings = () => {
     }
   }, [facility?.id]);
 
-  // ─── LÓGICA DE MERCADO PAGO ───
   const APP_ID = import.meta.env.VITE_MP_APP_ID;
-  const REDIRECT_URI = `${window.location.origin}/admin/settings`; // <-- CAMBIO ACÁ
+  const REDIRECT_URI = `${window.location.origin}/admin/settings`;
   const authUrl = `https://auth.mercadopago.com/authorization?client_id=${APP_ID}&response_type=code&platform_id=mp&state=link-account&redirect_uri=${REDIRECT_URI}`;
-
 
   useEffect(() => {
     if (facility) {
@@ -129,11 +186,14 @@ const AdminSettings = () => {
         deposit_percentage: facility.deposit_percentage || 50,
         mp_connected: facility.mp_connected || false,
         cancellation_window_hours: facility.cancellation_window_hours ?? 12,
-        // --- CARGAMOS EVENTOS DESDE DB ---
         has_events: facility.has_events || false,
         default_event_duration: facility.default_event_duration || 180,
         default_event_includes: facility.default_event_includes || "",
         default_event_price: facility.default_event_price || 0,
+        holiday_open_time: facility.holiday_open_time || "12:00",
+        holiday_close_time: facility.holiday_close_time || "23:00",
+        event_open_time: facility.event_open_time?.slice(0,5) || "12:00",
+        event_close_time: facility.event_close_time?.slice(0,5) || "23:00",
       });
     }
   }, [facility]);
@@ -197,13 +257,9 @@ const AdminSettings = () => {
           setFacilityForm(prev => ({ ...prev, amenities: [...prev.amenities, trimmed] }));
       }
       setCustomAmenity(""); 
-
   };
-  // --- NUEVA LÓGICA PARA EVENTOS ---
-  // Transformamos el string separado por comas en un array real
+
   const eventAmenities = facilityForm.default_event_includes ? facilityForm.default_event_includes.split(',').map(a => a.trim()).filter(Boolean) : [];
-  
-  // Juntamos las comodidades del predio con las del evento para mostrar todas las opciones
   const allEventOptions = Array.from(new Set([...facilityForm.amenities, ...eventAmenities]));
 
   const toggleEventAmenity = (amenity: string) => {
@@ -296,7 +352,6 @@ const AdminSettings = () => {
                         <button 
                             onClick={async () => {
                                 try {
-                                    // Enviamos nulo a los campos de tokens para borrarlos físicamente de la fila
                                     await updateFacility.mutateAsync({ 
                                         mp_connected: false,
                                         mp_access_token: null,
@@ -414,6 +469,64 @@ const AdminSettings = () => {
                     </div>
                 </div>
             </div>
+
+            {/* --- SECCIÓN HORARIOS DE APERTURA MOVILIZADA ACÁ PARA SIMETRÍA --- */}
+            <div className="glass-card rounded-2xl p-6 relative">
+                <div className="flex justify-between items-start mb-4">
+                    <div>
+                        <h3 className="font-bold mb-1 flex items-center gap-2"><Clock className="w-4 h-4 text-primary" /> Horarios de Apertura</h3>
+                        <p className="text-xs text-muted-foreground">Configurá la apertura y cierre.</p>
+                    </div>
+                    <button onClick={handleSaveSchedules} disabled={upsertSchedule.isPending}
+                        className="flex items-center gap-1.5 bg-secondary text-secondary-foreground px-3 py-1.5 rounded-lg font-bold text-[11px] hover:opacity-90 transition-opacity disabled:opacity-50 shrink-0">
+                        <Save className="w-3.5 h-3.5" /> Guardar
+                    </button>
+                </div>
+                
+                <div className="space-y-1 mt-4 border border-border rounded-xl overflow-hidden bg-background/20">
+                    {DAYS.map((day, idx) => {
+                    const sched = localSchedules.find((s) => s.day_of_week === idx);
+                    if (!sched) return null;
+                    return (
+                        <div key={idx} className={cn("flex items-center gap-2 p-2 border-b border-border last:border-0 transition-colors", sched.is_open ? "bg-transparent" : "bg-muted/30 opacity-60")}>
+                            <button onClick={() => updateDay(idx, "is_open", !sched.is_open)}
+                                className={cn("w-10 h-5 rounded-full transition-colors relative shrink-0 border-2 border-transparent", sched.is_open ? "bg-primary" : "bg-muted-foreground/30")}>
+                                <div className={cn("absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform", sched.is_open ? "left-[18px]" : "left-0.5")} />
+                            </button>
+                            <span className="font-bold text-[11px] w-16 shrink-0 truncate">{day}</span>
+                            
+                            {sched.is_open ? (
+                                <div className="flex items-center gap-2 flex-1 justify-end">
+                                    <Select value={sched.open_time} onValueChange={(val) => updateDay(idx, "open_time", val)}>
+                                        <SelectTrigger className="h-8 w-[100px] text-xs font-bold bg-background">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent className="max-h-[220px]">
+                                            {TIME_OPTIONS.map(time => <SelectItem key={`open-${time}`} value={time} className="text-xs font-bold">{time} hs</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                    
+                                    <span className="text-[10px] font-semibold text-muted-foreground">a</span>
+                                    
+                                    <Select value={sched.close_time} onValueChange={(val) => updateDay(idx, "close_time", val)}>
+                                        <SelectTrigger className="h-8 w-[100px] text-xs font-bold bg-background">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent className="max-h-[220px]">
+                                            {TIME_OPTIONS.map(time => <SelectItem key={`close-${time}`} value={time} className="text-xs font-bold">{time} hs</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            ) : (
+                                <span className="text-[11px] font-medium text-muted-foreground italic flex-1 text-right pr-2">Cerrado</span>
+                            )}
+                        </div>
+                    );
+                    })}
+                </div>
+            </div>
+            {/* ------------------------------------------------------------------- */}
+
         </div>
 
         {/* COLUMNA DERECHA (5 de 12 espacios) */}
@@ -470,30 +583,59 @@ const AdminSettings = () => {
 
                     {facilityForm.has_events && (
                         <div className="pt-4 border-t border-border/50 animate-in fade-in slide-in-from-top-2 duration-300 space-y-5">
-                            <div>
-                                <label className="text-xs font-bold text-muted-foreground mb-2 flex items-center gap-1"><Timer className="w-3 h-3"/> Duración por defecto (Mínimo)</label>
-                                <Select value={facilityForm.default_event_duration.toString()} onValueChange={(val) => setFacilityForm(prev => ({...prev, default_event_duration: Number(val)}))}>
-                                    <SelectTrigger className="w-full h-12 border-2 border-primary/20 rounded-xl px-4 text-sm font-bold bg-background text-primary">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="120" className="font-bold text-xs">2 horas</SelectItem>
-                                        <SelectItem value="180" className="font-bold text-xs">3 horas</SelectItem>
-                                        <SelectItem value="240" className="font-bold text-xs">4 horas</SelectItem>
-                                        <SelectItem value="300" className="font-bold text-xs">5 horas</SelectItem>
-                                        <SelectItem value="360" className="font-bold text-xs">6 horas</SelectItem>
-                                    </SelectContent>
-                                </Select>
+                            
+                            {/* --- GRILLA DE 2 COLUMNAS (Duración y Precio) --- */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-bold text-muted-foreground mb-2 flex items-center gap-1"><Timer className="w-3 h-3"/> Duración por defecto (Mínimo)</label>
+                                    <Select value={facilityForm.default_event_duration.toString()} onValueChange={(val) => setFacilityForm(prev => ({...prev, default_event_duration: Number(val)}))}>
+                                        <SelectTrigger className="w-full h-12 border-2 border-primary/20 rounded-xl px-4 text-sm font-bold bg-background text-primary">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="120" className="font-bold text-xs">2 horas</SelectItem>
+                                            <SelectItem value="180" className="font-bold text-xs">3 horas</SelectItem>
+                                            <SelectItem value="240" className="font-bold text-xs">4 horas</SelectItem>
+                                            <SelectItem value="300" className="font-bold text-xs">5 horas</SelectItem>
+                                            <SelectItem value="360" className="font-bold text-xs">6 horas</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-muted-foreground mb-2 flex items-center gap-1"><Banknote className="w-3 h-3"/> Precio x hora por defecto ($)</label>
+                                    <input 
+                                        type="number" 
+                                        value={facilityForm.default_event_price} 
+                                        onChange={(e) => setFacilityForm({ ...facilityForm, default_event_price: Number(e.target.value) })} 
+                                        className="w-full h-12 px-4 rounded-xl border-2 border-primary/20 bg-background text-sm font-bold text-primary focus:border-primary outline-none" 
+                                    />
+                                </div> 
                             </div>
+
+                            {/* --- HORARIO PERMITIDO PARA EVENTOS --- */}
                             <div>
-                                <label className="text-xs font-bold text-muted-foreground mb-2 flex items-center gap-1"><Banknote className="w-3 h-3"/> Precio x hora por defecto ($)</label>
-                                <input 
-                                    type="number" 
-                                    value={facilityForm.default_event_price} 
-                                    onChange={(e) => setFacilityForm({ ...facilityForm, default_event_price: Number(e.target.value) })} 
-                                    className="w-full h-12 px-4 rounded-xl border-2 border-primary/20 bg-background text-sm font-bold text-primary focus:border-primary outline-none" 
-                                />
-                            </div>  
+                                <label className="text-xs font-bold text-muted-foreground mb-2 flex items-center gap-1"><Clock className="w-3 h-3"/> Rango horario permitido para eventos</label>
+                                <div className="flex items-center gap-3">
+                                    <Select value={facilityForm.event_open_time} onValueChange={(val) => setFacilityForm(prev => ({...prev, event_open_time: val}))}>
+                                        <SelectTrigger className="w-full h-12 border-2 border-primary/20 rounded-xl px-4 text-sm font-bold bg-background text-primary">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent className="max-h-[200px]">
+                                            {TIME_OPTIONS.map(t => <SelectItem key={`ev-open-${t}`} value={t}>{t} hs</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                    <span className="text-xs font-bold text-muted-foreground">a</span>
+                                    <Select value={facilityForm.event_close_time} onValueChange={(val) => setFacilityForm(prev => ({...prev, event_close_time: val}))}>
+                                        <SelectTrigger className="w-full h-12 border-2 border-primary/20 rounded-xl px-4 text-sm font-bold bg-background text-primary">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent className="max-h-[200px]">
+                                            {TIME_OPTIONS.map(t => <SelectItem key={`ev-close-${t}`} value={t}>{t} hs</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <p className="text-[9px] text-muted-foreground mt-2 text-right">Los clientes no podrán extender sus horas por fuera de este límite.</p>
+                            </div>
                             
                             {/* NUEVO DISEÑO DE CHIPS PARA EVENTOS */}
                             <div>
@@ -523,61 +665,76 @@ const AdminSettings = () => {
                     )}
                 </div>
             </div>
-            {/* --- FIN SECCIÓN EVENTOS --- */} 
+            {/* --- FIN SECCIÓN EVENTOS --- */}
 
-            {/* HORARIOS */}
-            <div className="glass-card rounded-2xl p-6 relative">
-                <div className="flex justify-between items-start mb-4">
-                    <div>
-                        <h3 className="font-bold mb-1 flex items-center gap-2"><Clock className="w-4 h-4 text-primary" /> Horarios de Apertura</h3>
-                        <p className="text-xs text-muted-foreground">Configurá la apertura y cierre.</p>
-                    </div>
-                    <button onClick={handleSaveSchedules} disabled={upsertSchedule.isPending}
-                        className="flex items-center gap-1.5 bg-secondary text-secondary-foreground px-3 py-1.5 rounded-lg font-bold text-[11px] hover:opacity-90 transition-opacity disabled:opacity-50 shrink-0">
-                        <Save className="w-3.5 h-3.5" /> Guardar
-                    </button>
-                </div>
-                
-                <div className="space-y-1 mt-4 border border-border rounded-xl overflow-hidden bg-background/20">
-                    {DAYS.map((day, idx) => {
-                    const sched = localSchedules.find((s) => s.day_of_week === idx);
-                    if (!sched) return null;
-                    return (
-                        <div key={idx} className={cn("flex items-center gap-2 p-2 border-b border-border last:border-0 transition-colors", sched.is_open ? "bg-transparent" : "bg-muted/30 opacity-60")}>
-                            <button onClick={() => updateDay(idx, "is_open", !sched.is_open)}
-                                className={cn("w-10 h-5 rounded-full transition-colors relative shrink-0 border-2 border-transparent", sched.is_open ? "bg-primary" : "bg-muted-foreground/30")}>
-                                <div className={cn("absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform", sched.is_open ? "left-[18px]" : "left-0.5")} />
-                            </button>
-                            <span className="font-bold text-[11px] w-16 shrink-0 truncate">{day}</span>
-                            
-                            {sched.is_open ? (
-                                <div className="flex items-center gap-2 flex-1 justify-end">
-                                    <Select value={sched.open_time} onValueChange={(val) => updateDay(idx, "open_time", val)}>
-                                        <SelectTrigger className="h-8 w-[100px] text-xs font-bold bg-background">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent className="max-h-[220px]">
-                                            {TIME_OPTIONS.map(time => <SelectItem key={`open-${time}`} value={time} className="text-xs font-bold">{time} hs</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                    
-                                    <span className="text-[10px] font-semibold text-muted-foreground">a</span>
-                                    
-                                    <Select value={sched.close_time} onValueChange={(val) => updateDay(idx, "close_time", val)}>
-                                        <SelectTrigger className="h-8 w-[100px] text-xs font-bold bg-background">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent className="max-h-[220px]">
-                                            {TIME_OPTIONS.map(time => <SelectItem key={`close-${time}`} value={time} className="text-xs font-bold">{time} hs</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            ) : (
-                                <span className="text-[11px] font-medium text-muted-foreground italic flex-1 text-right pr-2">Cerrado</span>
-                            )}
+            {/* --- SECCIÓN: CONFIGURACIÓN DE FERIADOS --- */}
+            <div className="glass-card rounded-2xl p-6 relative border-t-4 border-t-orange-500 shadow-lg bg-orange-500/5">
+                <h3 className="font-bold mb-1 flex items-center gap-2 text-orange-700">
+                    <CalendarCheck className="w-5 h-5" /> Gestión de Feriados
+                </h3>
+                <p className="text-xs text-muted-foreground mb-5">Configurá cómo se comporta el predio los días no laborables.</p>
+
+                <div className="space-y-4">
+                    {/* Horario base para cualquier feriado */}
+                    <div className="bg-card border border-border rounded-xl p-4">
+                        <label className="text-xs font-bold text-muted-foreground mb-3 block">Horario por defecto en Feriados</label>
+                        <div className="flex items-center gap-3">
+                            <Select value={facilityForm.holiday_open_time} onValueChange={(val) => setFacilityForm({...facilityForm, holiday_open_time: val})}>
+                                <SelectTrigger className="h-10 font-bold"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    {TIME_OPTIONS.map(t => <SelectItem key={t} value={t}>{t} hs</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                            <span className="text-xs font-bold">a</span>
+                            <Select value={facilityForm.holiday_close_time} onValueChange={(val) => setFacilityForm({...facilityForm, holiday_close_time: val})}>
+                                <SelectTrigger className="h-10 font-bold"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    {TIME_OPTIONS.map(t => <SelectItem key={t} value={t}>{t} hs</SelectItem>)}
+                                </SelectContent>
+                            </Select>
                         </div>
-                    );
-                    })}
+                        <p className="text-[10px] text-muted-foreground mt-2">
+                            Ezequiel: "Feriado es de {facilityForm.holiday_open_time} a {facilityForm.holiday_close_time}"
+                        </p>
+                    </div>
+
+                    {/* Botón para abrir el Modal */}
+                    <button 
+                        onClick={() => {
+                            setNewHoliday({ ...newHoliday, open_time: facilityForm.holiday_open_time || "12:00", close_time: facilityForm.holiday_close_time || "23:00" });
+                            setHolidayModalOpen(true);
+                        }}
+                        className="w-full flex items-center justify-center gap-2 bg-orange-500 text-white py-3 rounded-xl font-bold text-sm hover:bg-orange-600 transition-colors shadow-sm"
+                    >
+                        <Plus className="w-4 h-4" /> Agregar Feriado Específico
+                    </button>
+                    {/* Lista Dinámica de Feriados */}
+                    <div className="space-y-2">
+                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-wider">Feriados Agendados</p>
+                        {holidays.length === 0 ? (
+                            <p className="text-xs text-muted-foreground text-center py-3 italic bg-background/50 rounded-xl border border-dashed border-border">No hay feriados cargados.</p>
+                        ) : (
+                            holidays.map(holiday => {
+                                const holidayDate = new Date(holiday.date + "T00:00:00"); 
+                                return (
+                                    <div key={holiday.id} className="flex items-center justify-between p-3 bg-background border border-border rounded-xl shadow-sm">
+                                        <div>
+                                            <p className="text-xs font-bold">{holiday.label}</p>
+                                            <p className="text-[10px] text-muted-foreground capitalize">{format(holidayDate, "EEEE, d 'de' MMMM yyyy", { locale: es })}</p>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            {holiday.is_closed ? (
+                                                <span className="text-[9px] bg-destructive/10 text-destructive px-2 py-0.5 rounded font-bold">CERRADO</span>
+                                            ) : (
+                                                <span className="text-[9px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded font-bold">{holiday.custom_open_time?.slice(0,5)} - {holiday.custom_close_time?.slice(0,5)}</span>
+                                            )}
+                                            <button onClick={() => setHolidayToDelete({ id: holiday.id, label: holiday.label })} className="text-destructive p-1 hover:bg-destructive/10 rounded transition-colors"><Trash2 className="w-3.5 h-3.5"/></button>
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -645,6 +802,122 @@ const AdminSettings = () => {
             
         </div>
       </div>
+
+      {/* MODAL: NUEVO FERIADO */}
+      {holidayModalOpen && (
+        <div className="fixed inset-0 z-50 bg-foreground/40 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200" onClick={() => setHolidayModalOpen(false)}>
+          <div onClick={(e) => e.stopPropagation()} className="bg-card rounded-3xl p-6 max-w-sm w-full shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between mb-4 border-b border-border/50 pb-4">
+              <h3 className="font-extrabold text-xl text-orange-600 flex items-center gap-2"><CalendarCheck className="w-5 h-5"/> Nuevo Feriado</h3>
+              <button onClick={() => setHolidayModalOpen(false)} className="p-2 rounded-full hover:bg-muted"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Nombre */}
+              <div>
+                <label className="text-xs font-bold text-muted-foreground mb-1.5 block">Nombre / Motivo *</label>
+                <input 
+                  className="w-full border-2 border-border/50 rounded-xl px-3 py-2.5 text-sm bg-background outline-none focus:border-orange-500 font-semibold" 
+                  placeholder="Ej: Navidad, 25 de Mayo"
+                  value={newHoliday.label}
+                  onChange={e => setNewHoliday({...newHoliday, label: e.target.value})}
+                />
+              </div>
+
+              {/* Fecha (Calendario Shadcn) */}
+              <div>
+                <label className="text-xs font-bold text-muted-foreground mb-1.5 block">Fecha *</label>
+                <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                  <PopoverTrigger asChild>
+                    <button onClick={() => setCalendarOpen(true)} className={cn("w-full border-2 border-border/50 rounded-xl px-3 py-2.5 text-sm bg-background outline-none focus:border-orange-500 font-semibold flex justify-between items-center text-left", !newHoliday.date && "text-muted-foreground")}>
+                      {newHoliday.date ? format(newHoliday.date, "PPP", { locale: es }) : "Seleccionar fecha en el calendario"}
+                      <CalendarCheck className="w-4 h-4 text-muted-foreground" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 z-[60]" align="center">
+                    <Calendar
+                      mode="single"
+                      selected={newHoliday.date}
+                      onSelect={(date) => { 
+                          setNewHoliday({...newHoliday, date: date || undefined}); 
+                          setCalendarOpen(false); // Magia: Cierra el calendario automáticamente
+                      }}
+                      initialFocus
+                      locale={es}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* Cerrado o Abierto */}
+              <div className="pt-3 border-t border-border/50 mt-2">
+                 <div className="flex items-center justify-between mb-3 bg-muted/30 p-3 rounded-xl border border-border">
+                     <div>
+                        <p className="font-bold text-sm">¿El predio cierra por completo?</p>
+                        <p className="text-[10px] text-muted-foreground">Nadie podrá reservar este día.</p>
+                     </div>
+                     <button onClick={() => setNewHoliday({...newHoliday, is_closed: !newHoliday.is_closed})}
+                         className={cn("w-10 h-5 rounded-full transition-colors relative shrink-0 border-2 border-transparent", newHoliday.is_closed ? "bg-destructive" : "bg-muted-foreground/30")}>
+                         <div className={cn("absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform", newHoliday.is_closed ? "left-[18px]" : "left-0.5")} />
+                     </button>
+                 </div>
+
+                 {!newHoliday.is_closed && (
+                   <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                      <label className="text-xs font-bold text-muted-foreground">Horario Especial para este día</label>
+                      <div className="flex items-center gap-3">
+                          <Select value={newHoliday.open_time} onValueChange={val => setNewHoliday({...newHoliday, open_time: val})}>
+                              <SelectTrigger className="h-10 font-bold border-2 focus:border-orange-500"><SelectValue /></SelectTrigger>
+                              <SelectContent className="z-[60]">{TIME_OPTIONS.map(t => <SelectItem key={t} value={t}>{t} hs</SelectItem>)}</SelectContent>
+                          </Select>
+                          <span className="text-xs font-bold">a</span>
+                          <Select value={newHoliday.close_time} onValueChange={val => setNewHoliday({...newHoliday, close_time: val})}>
+                              <SelectTrigger className="h-10 font-bold border-2 focus:border-orange-500"><SelectValue /></SelectTrigger>
+                              <SelectContent className="z-[60]">{TIME_OPTIONS.map(t => <SelectItem key={t} value={t}>{t} hs</SelectItem>)}</SelectContent>
+                          </Select>
+                      </div>
+                   </div>
+                 )}
+              </div>
+            </div>
+
+            <button onClick={handleAddHoliday} disabled={createHoliday.isPending} className="w-full mt-6 bg-orange-500 text-white py-3.5 rounded-xl font-black text-sm hover:bg-orange-600 transition-opacity disabled:opacity-50 shadow-md">
+              Confirmar Día
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMACIÓN DE BORRADO PARA FERIADOS */}
+      {holidayToDelete && (
+        <div className="fixed inset-0 z-[60] bg-foreground/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-card rounded-3xl p-6 max-w-sm w-full shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-200 border border-border/50">
+            <div className="w-16 h-16 bg-destructive/10 text-destructive rounded-full flex items-center justify-center mb-4">
+              <Trash2 className="w-8 h-8" />
+            </div>
+            <h3 className="font-extrabold text-xl mb-2">¿Eliminar Feriado?</h3>
+            <p className="text-sm text-muted-foreground mb-6">
+              Estás a punto de eliminar <strong>"{holidayToDelete.label}"</strong>. Esta acción no se puede deshacer.
+            </p>
+            
+            <div className="flex gap-3 w-full">
+              <button 
+                onClick={() => setHolidayToDelete(null)} 
+                className="flex-1 py-3 rounded-xl text-sm font-bold bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={executeDeleteHoliday}
+                disabled={deleteHoliday.isPending}
+                className="flex-1 py-3 rounded-xl text-sm font-bold bg-destructive text-white hover:opacity-90 transition-opacity shadow-md disabled:opacity-50"
+              >
+                Sí, eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 };

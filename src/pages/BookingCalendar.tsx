@@ -3,11 +3,11 @@ import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { format, addDays, getDay } from "date-fns";
 import { es } from "date-fns/locale";
-import { useCourt, useBookingsByCourt, generateAvailableSlots, useFacilitySchedulesByFacilityId } from "@/hooks/use-supabase-data";
+import { useCourt, useBookingsByCourt, generateAvailableSlots, useFacilitySchedulesByFacilityId, useHolidays } from "@/hooks/use-supabase-data";
 import { useTenantPath } from "@/hooks/use-tenant";
 import PlayerLayout from "@/components/layout/PlayerLayout";
 import { cn } from "@/lib/utils";
-import { Calendar, Clock, Trophy } from "lucide-react"; // <-- Agregamos Trophy
+import { Calendar, Clock, Trophy } from "lucide-react";
 
 const BookingCalendar = () => {
   const { courtId } = useParams();
@@ -15,6 +15,7 @@ const BookingCalendar = () => {
   const tp = useTenantPath();
   const { data: court, isLoading: loadingCourt } = useCourt(courtId);
   const { data: schedules = [] } = useFacilitySchedulesByFacilityId(court?.facility_id);
+  const { data: holidays = [] } = useHolidays(); // <-- TRAEMOS LOS FERIADOS
 
   const today = new Date();
   const dates = Array.from({ length: 14 }, (_, i) => addDays(today, i));
@@ -24,21 +25,52 @@ const BookingCalendar = () => {
   const dateStr = format(selectedDate, "yyyy-MM-dd");
   const { data: bookings = [] } = useBookingsByCourt(courtId, dateStr);
 
-  const jsDay = getDay(selectedDate); 
-  const dayIdx = jsDay === 0 ? 6 : jsDay - 1; 
-  const daySchedule = schedules.find((s) => s.day_of_week === dayIdx);
-  const isDayClosed = daySchedule ? !daySchedule.is_open : false;
+  // 1. LÓGICA DE FERIADOS: Verificamos si la fecha seleccionada actual es feriado
+  const todayHoliday = holidays.find(h => h.date === dateStr);
 
+  // 2. FUNCIÓN MEJORADA: ¿Está cerrado el día? (Para tachar los días en el selector de arriba)
   const isDateClosed = (date: Date) => {
+    const formattedDate = format(date, "yyyy-MM-dd");
+    const holidayForDate = holidays.find(h => h.date === formattedDate);
+    
+    // Si hay un feriado cargado para ese día, mandamos su estado (is_closed)
+    if (holidayForDate) {
+        return holidayForDate.is_closed;
+    }
+
+    // Si no es feriado, usamos el horario normal semanal
     const js = getDay(date);
     const idx = js === 0 ? 6 : js - 1;
     const sched = schedules.find((s) => s.day_of_week === idx);
     return sched ? !sched.is_open : false;
   };
 
-  const openHour = daySchedule?.is_open ? parseInt(daySchedule.open_time.split(":")[0]) : 8;
-  let closeHour = daySchedule?.is_open ? parseInt(daySchedule.close_time.split(":")[0]) : 23;
+  // 3. LÓGICA DE HORARIOS MEJORADA (Prioridad: Feriado > Horario Normal)
+  const jsDay = getDay(selectedDate); 
+  const dayIdx = jsDay === 0 ? 6 : jsDay - 1; 
+  const daySchedule = schedules.find((s) => s.day_of_week === dayIdx);
+  
+  let isDayClosed = false;
+  let openHour = -1;
+  let closeHour = -1;
 
+  if (todayHoliday) {
+      // 🚨 MODO FERIADO ACTIVADO
+      isDayClosed = todayHoliday.is_closed;
+      if (!isDayClosed) {
+          openHour = parseInt(todayHoliday.custom_open_time?.split(":")[0] || "12");
+          closeHour = parseInt(todayHoliday.custom_close_time?.split(":")[0] || "23");
+      }
+  } else {
+      // 📅 MODO SEMANA NORMAL
+      isDayClosed = daySchedule ? !daySchedule.is_open : false;
+      if (!isDayClosed) {
+          openHour = daySchedule?.is_open ? parseInt(daySchedule.open_time.split(":")[0]) : 8;
+          closeHour = daySchedule?.is_open ? parseInt(daySchedule.close_time.split(":")[0]) : 23;
+      }
+  }
+
+  // Ajuste para medianoche
   if (closeHour <= openHour && closeHour >= 0) {
     closeHour += 24;
   }
@@ -46,6 +78,8 @@ const BookingCalendar = () => {
   const slots = useMemo(() => generateAvailableSlots(bookings, dateStr, openHour, closeHour), [bookings, dateStr, openHour, closeHour]);
   
   const availableSlots = useMemo(() => {
+    if (isDayClosed) return []; // Si está cerrado, devolvemos array vacío
+      
     const now = new Date();
     // Verificamos si la fecha seleccionada es exactamente el día de hoy
     const isToday = format(selectedDate, "yyyy-MM-dd") === format(now, "yyyy-MM-dd");
@@ -65,7 +99,7 @@ const BookingCalendar = () => {
       // Si es mañana o cualquier otro día futuro, mostramos todo
       return true;
     });
-  }, [slots, selectedDate]);
+  }, [slots, selectedDate, isDayClosed]);
 
   if (loadingCourt) return <PlayerLayout><div className="container py-10 text-center text-muted-foreground">Cargando...</div></PlayerLayout>;
   if (!court) return null;
@@ -78,7 +112,7 @@ const BookingCalendar = () => {
 
   return (
     <PlayerLayout showBack backTo={tp(`/courts/${court.sport_id}`)} title="Reservar">
-      {/* MEJORA 1: Imagen "Hero" tipo portada. Se expande a los bordes en mobile y se redondea en desktop */}
+      {/* Imagen Hero */}
       <div className="relative w-full h-48 sm:h-64 bg-muted mb-6 sm:rounded-b-3xl sm:max-w-4xl sm:mx-auto overflow-hidden shadow-sm">
           {court.image_url ? (
               <img src={court.image_url} alt={court.name} className="w-full h-full object-cover" />
@@ -87,7 +121,6 @@ const BookingCalendar = () => {
                   <Trophy className="w-16 h-16 text-muted-foreground/30" />
               </div>
           )}
-          {/* Degradado oscuro para que el texto blanco resalte siempre */}
           <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
           
           <div className="absolute bottom-4 left-4 right-4 sm:left-8 sm:bottom-6">
@@ -101,8 +134,20 @@ const BookingCalendar = () => {
           </div>
       </div>
 
-      {/* MEJORA 2: Agregamos pb-32 (padding-bottom) para que el botón flotante no tape los últimos horarios */}
       <div className="container px-4 pb-32 max-w-4xl mx-auto">
+        
+        {/* Cartelito de Feriado si es que aplica */}
+        {todayHoliday && (
+            <div className="mb-4 bg-orange-500/10 border border-orange-500/20 rounded-xl p-3 flex items-center justify-between animate-in fade-in duration-300">
+                <div className="flex flex-col">
+                    <span className="text-orange-600 font-bold text-sm">⭐ Feriado: {todayHoliday.label}</span>
+                    <span className="text-orange-600/80 text-[10px] uppercase font-semibold tracking-wider">
+                        {todayHoliday.is_closed ? "El predio se encuentra cerrado." : `Horario especial: ${todayHoliday.custom_open_time?.slice(0,5)} a ${todayHoliday.custom_close_time?.slice(0,5)}`}
+                    </span>
+                </div>
+            </div>
+        )}
+
         {/* Date selector */}
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-3">
@@ -113,14 +158,21 @@ const BookingCalendar = () => {
             {dates.map((date) => {
               const isSelected = format(date, "yyyy-MM-dd") === format(selectedDate, "yyyy-MM-dd");
               const closed = isDateClosed(date);
+              
+              // Pequeño check para ver si la fecha en el loop es feriado (para ponerle una marquita)
+              const isHoliday = holidays.some(h => h.date === format(date, "yyyy-MM-dd"));
+
               return (
                 <button key={date.toISOString()}
                   onClick={() => { if (!closed) { setSelectedDate(date); setSelectedTime(null); } }}
                   disabled={closed}
-                  className={cn("flex flex-col items-center min-w-[64px] py-3 px-2 rounded-2xl text-xs font-medium transition-all shrink-0 border-2",
+                  className={cn("flex flex-col items-center min-w-[64px] py-3 px-2 rounded-2xl text-xs font-medium transition-all shrink-0 border-2 relative",
                     closed ? "bg-muted/30 border-transparent opacity-40 cursor-not-allowed" :
                     isSelected ? "bg-primary text-primary-foreground border-primary shadow-lg scale-105 transform origin-bottom" : "bg-card border-transparent shadow-sm hover:border-primary/30")}
                 >
+                  {isHoliday && !closed && (
+                      <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-orange-500 shadow-sm" />
+                  )}
                   <span className={cn("uppercase text-[10px] font-bold mb-1", isSelected ? "text-primary-foreground/90" : "text-muted-foreground")}>
                     {format(date, "EEE", { locale: es })}
                   </span>
@@ -174,7 +226,6 @@ const BookingCalendar = () => {
           <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} className="fixed bottom-0 left-0 right-0 p-4 sm:p-5 bg-background/95 backdrop-blur-xl border-t border-border shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] z-30">
             <div className="container max-w-4xl mx-auto flex items-center justify-between gap-4">
               
-              {/* Lado izquierdo: Fecha y Hora */}
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold text-muted-foreground capitalize truncate">
                   {format(selectedDate, "EEEE d 'de' MMMM", { locale: es })}
@@ -185,7 +236,6 @@ const BookingCalendar = () => {
                 </div>
               </div>
 
-              {/* Lado derecho: Precio y Botón */}
               <div className="flex items-center gap-3 sm:gap-5 shrink-0">
                 <div className="text-right">
                     <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-0.5">Total</p>

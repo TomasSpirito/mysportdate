@@ -8,7 +8,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import TenantRoute from "@/components/TenantRoute";
 import Landing from "./pages/Landing";
 import Login from "./pages/auth/Login";
-import UpdatePassword from "./pages/auth/UpdatePassword"; // <-- NUEVA IMPORTACIÓN
+import UpdatePassword from "./pages/auth/UpdatePassword"; 
 import Index from "./pages/Index";
 import Courts from "./pages/Courts";
 import BookingCalendar from "./pages/BookingCalendar";
@@ -25,6 +25,7 @@ import AdminPlayers from "./pages/admin/Players";
 import AdminBuffet from "./pages/admin/Buffet";
 import NotFound from "./pages/NotFound";
 import CancelBooking from "@/pages/CancelBooking";
+import Events from "@/pages/Events"; // <-- Asegurate de que el archivo Events.tsx esté en la carpeta src/pages/
 
 const queryClient = new QueryClient();
 
@@ -39,7 +40,7 @@ const App = () => (
             {/* Landing & Auth */}
             <Route path="/" element={<Landing />} />
             <Route path="/auth/login" element={<Login />} />
-            <Route path="/auth/update-password" element={<UpdatePassword />} /> {/* <-- NUEVA RUTA */}
+            <Route path="/auth/update-password" element={<UpdatePassword />} />
             <Route path="/cancelar/:token" element={<CancelBooking />} />
 
             {/* Public tenant pages */}
@@ -49,6 +50,8 @@ const App = () => (
               <Route path="booking/:courtId" element={<BookingCalendar />} />
               <Route path="checkout" element={<Checkout />} />
               <Route path="confirmation" element={<Confirmation />} />
+              {/* <-- NUEVA RUTA DE EVENTOS ADENTRO DEL TENANT --> */}
+              <Route path="events" element={<Events />} /> 
             </Route>
 
             {/* Protected admin pages */}

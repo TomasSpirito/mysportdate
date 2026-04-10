@@ -135,6 +135,54 @@ const Index = () => {
                     )}
                 </motion.div>
 
+                {/* --- BANNER DE EVENTOS (Solo visible si el predio lo habilitó) --- */}
+                {facility?.has_events && (
+                    <motion.div 
+                        initial={{ opacity: 0, y: 10, scale: 0.98 }} 
+                        animate={{ opacity: 1, y: 0, scale: 1 }} 
+                        transition={{ delay: 0.15 }} 
+                        className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary/90 to-primary p-6 sm:p-8 text-primary-foreground shadow-xl shadow-primary/20 border border-primary/20"
+                    >
+                        {/* Decoración de fondo */}
+                        <div className="absolute top-0 right-0 -mt-10 -mr-10 opacity-10 pointer-events-none">
+                            <PartyPopper className="w-64 h-64 rotate-12" />
+                        </div>
+                        <div className="absolute bottom-0 left-0 -mb-8 -ml-8 opacity-10 pointer-events-none">
+                            <Star className="w-40 h-40 -rotate-12" />
+                        </div>
+
+                        <div className="relative z-10 flex flex-col sm:flex-row items-center sm:items-start gap-6">
+                            {/* Ícono llamativo */}
+                            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0 shadow-inner border border-white/30">
+                                <PartyPopper className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
+                            </div>
+
+                            {/* Textos y Botón */}
+                            <div className="flex-1 text-center sm:text-left">
+                                <h2 className="text-2xl sm:text-3xl font-black mb-2 text-white">¿Festejás tu Cumpleaños?</h2>
+                                <p className="text-primary-foreground/90 font-medium mb-5 text-sm sm:text-base max-w-md mx-auto sm:mx-0">
+                                    Alquilá nuestras instalaciones de forma exclusiva. 
+                                    {facility.default_event_includes ? ` Incluye: ${facility.default_event_includes}.` : " Organizá un evento inolvidable con nosotros."}
+                                </p>
+                                
+                                <div className="flex flex-col sm:flex-row items-center gap-3">
+                                    <button 
+                                        onClick={() => navigate(tp('/events'))} // Asumimos que crearemos una ruta /events
+                                        className="bg-white text-primary px-6 py-3 rounded-xl font-bold text-sm hover:scale-105 hover:shadow-lg transition-all active:scale-95 flex items-center gap-2 w-full sm:w-auto justify-center"
+                                    >
+                                        Ver disponibilidad y precios <ChevronRight className="w-4 h-4" />
+                                    </button>
+                                    
+                                    <span className="text-xs font-semibold text-white/80 bg-black/10 px-3 py-1.5 rounded-lg border border-white/10 backdrop-blur-sm">
+                                        Mínimo {facility.default_event_duration / 60} horas
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+                {/* --- FIN BANNER EVENTOS --- */}
+
                 {/* NUEVOS Servicios (Amenities) Visuales */}
                 {facility?.amenities && facility.amenities.length > 0 && (
                     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="space-y-5">

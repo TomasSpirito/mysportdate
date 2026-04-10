@@ -1,14 +1,13 @@
 import { useState, useMemo, useEffect } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useSearchParams, useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { format, parse } from "date-fns";
 import { es } from "date-fns/locale";
-// IMPORTAMOS useFacility y useCreateBooking
 import { useCourt, useAddons, useFacility, useCreateBooking, type Facility } from "@/hooks/use-supabase-data";
 import { useTenantPath } from "@/hooks/use-tenant";
 import PlayerLayout from "@/components/layout/PlayerLayout";
 import { cn } from "@/lib/utils";
-import { Check, Clock, CreditCard, User, Mail, Phone, Loader2, Trophy, Calendar, ShieldCheck, Banknote } from "lucide-react";
+import { Check, Clock, CreditCard, User, Mail, Phone, Loader2, Trophy, Calendar, ShieldCheck, Banknote, PartyPopper } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -22,27 +21,45 @@ type ExtendedFacility = Facility & {
 const Checkout = () => {
   const [params] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const tp = useTenantPath();
-  const courtId = params.get("court");
-  const date = params.get("date");
-  const time = params.get("time");
+
+  // 1. LEEMOS LOS DATOS: Primero nos fijamos si vienen por el estado (Eventos), sino usamos la URL (Fútbol normal)
+  const isEvent = location.state?.isEvent || false;
+  const courtId = location.state?.courtId || params.get("court");
+  const date = location.state?.date || params.get("date");
+  const time = location.state?.time || params.get("time");
+  
+  // Duración dinámica. Si es evento, usamos la que eligió el cliente. Si es normal, asumimos 1 hora (60 mins).
+  const durationMins = location.state?.duration || 60;
+  const durationHours = durationMins / 60;
+  
+  // Precio base. Si es evento, usamos el total ya calculado. Si es normal, usamos el de la tabla.
+  const eventPrice = location.state?.price || 0;
+  const eventDeposit = location.state?.deposit || 0;
   
   const { data: court } = useCourt(courtId || undefined);
   const { data: addons = [] } = useAddons();
   const { data: facilityBase } = useFacility(); 
   const facility = facilityBase as ExtendedFacility | undefined;
-  const createBooking = useCreateBooking(); // TRAEMOS EL MUTATOR PARA RESERVAS DE $0
+  const createBooking = useCreateBooking();
 
   const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
   const [payDeposit, setPayDeposit] = useState(true);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
+  
+  // Si venimos de la página de eventos, pre-cargamos los datos que el usuario ya tipeó
+  const [name, setName] = useState(location.state?.userData?.name || "");
+  const [email, setEmail] = useState(location.state?.userData?.email || "");
+  const [phone, setPhone] = useState(location.state?.userData?.phone || "");
+  
   const [isProcessing, setIsProcessing] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
 
-  const endHour = time ? parseInt(time.split(":")[0]) + 1 : 0;
+  // Calculamos la hora de fin sumándole la duración dinámica
+  const startHour = time ? parseInt(time.split(":")[0]) : 0;
+  const endHourRaw = startHour + durationHours;
+  const endHour = endHourRaw % 24; // Módulo 24 por si pasa de la medianoche
   const endTime = `${endHour.toString().padStart(2, "0")}:00`;
   const dateObj = date ? parse(date, "yyyy-MM-dd", new Date()) : new Date();
 
@@ -51,13 +68,15 @@ const Checkout = () => {
 
   const addonsTotal = useMemo(() => addons.filter((a) => selectedAddons.includes(a.id)).reduce((sum, a) => sum + a.price, 0), [selectedAddons, addons]);
   
-  const total = court ? (court.price_per_hour + addonsTotal) : 0;
+  // Calculamos el total. Si es evento, usamos el precio que nos mandaron. Sino, usamos el precio por hora de la cancha normal.
+  const total = isEvent ? (eventPrice + addonsTotal) : court ? (court.price_per_hour + addonsTotal) : 0;
 
   // LÓGICA DE SEÑA DINÁMICA BASADA EN LA CONFIGURACIÓN
   const requiresDeposit = facility?.requires_deposit ?? false;
   const depositPercentage = facility?.deposit_percentage ?? 50;
-  // Si exige seña, calcula el %. Si no, la opción "payDeposit" actuará como "Pago en predio" ($0)
-  const depositAmount = requiresDeposit ? Math.round(total * (depositPercentage / 100)) : 0;
+  
+  // Si es evento, usamos la seña que nos mandaron. Sino, la calculamos acá.
+  const depositAmount = requiresDeposit ? (isEvent ? eventDeposit : Math.round(total * (depositPercentage / 100))) : 0;
 
   useEffect(() => {
     if (mpFailed === "1" || mpStatus === "failure" || mpStatus === "null") {
@@ -90,7 +109,6 @@ const Checkout = () => {
 
   const toggleAddon = (id: string) => setSelectedAddons((prev) => (prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]));
 
-  // EXPRESIONES REGULARES (REGEX) PARA VALIDACIÓN REAL
   const isNameValid = name.trim().length >= 2;
   const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const isPhoneValid = /^[0-9+\-\s()]{8,20}$/.test(phone.trim());
@@ -111,10 +129,14 @@ const Checkout = () => {
 
       // BY-PASS: Si el monto a pagar es $0 (Pago en el club sin seña obligatoria)
       if (amountToPay === 0) {
+          const startDateTime = new Date(`${date}T${time}:00`);
+          const endDateTime = new Date(startDateTime.getTime() + durationMins * 60000);
+
           await createBooking.mutateAsync({
               court_id: courtId!, date: date, time: time,
               user_name: name.trim(), user_email: email.trim(), user_phone: phone.trim(),
               total_price: total, deposit_amount: 0, payment_status: "none", booking_type: "online",
+              end_time: endDateTime.toISOString()
           } as any);
           
           const confirmParams = new URLSearchParams({
@@ -126,7 +148,6 @@ const Checkout = () => {
       }
 
       // SI HAY QUE PAGAR ALGO, VAMOS A MERCADO PAGO
-      // Validación de seguridad: Asegurarnos de que el predio cargó
       if (!facility?.id) {
         throw new Error("No se pudo identificar el predio para realizar el cobro.");
       }
@@ -135,14 +156,18 @@ const Checkout = () => {
       const currentUrl = window.location.href.split("?")[0];
       const backBase = `${currentUrl}?court=${courtId}&date=${date}&time=${time}`;
 
+      const startDateTime = new Date(`${date}T${time}:00`);
+      const endDateTime = new Date(startDateTime.getTime() + durationMins * 60000);
+
       const { data, error } = await supabase.functions.invoke("mercadopago-checkout", {
         body: {
           title: paymentDesc, 
           unit_price: amountToPay,
-          facility_id: facility.id, // <-- EL DATO CLAVE AÑADIDO ACÁ
+          facility_id: facility.id, 
           booking_data: {
             court_id: courtId, date: date, time: time, user_name: name.trim(), user_email: email.trim(), user_phone: phone.trim(),
             total_price: total, deposit_amount: payDeposit ? depositAmount : total, payment_status: payDeposit ? "partial" : "full", addon_ids: selectedAddons.join(","),
+            end_time: endDateTime.toISOString() // IMPORTANTÍSIMO: Le avisamos al backend la duración real del evento
           },
           back_urls: { success: `${backBase}&status=approved`, failure: `${backBase}&status=failure`, pending: `${backBase}&status=pending` },
         },
@@ -150,7 +175,6 @@ const Checkout = () => {
 
       if (error) throw error;
       
-      // VAMOS A LA PASARELA REAL DE PRODUCCIÓN
       if (data.init_point) {
         window.location.href = data.init_point;
       } else {
@@ -166,24 +190,25 @@ const Checkout = () => {
   const amountToPayNow = payDeposit ? depositAmount : total;
 
   return (
-    <PlayerLayout showBack backTo={tp(`/booking/${courtId}`)} title="Reserva">
+    <PlayerLayout showBack backTo={tp(isEvent ? `/events` : `/booking/${courtId}`)} title={isEvent ? "Pago del Evento" : "Reserva"}>
       <div className="container max-w-3xl mx-auto px-4 py-6 pb-32">
         
         {/* Resumen */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card rounded-2xl overflow-hidden border border-border shadow-sm mb-6 flex flex-col sm:flex-row">
-            <div className="w-full sm:w-48 h-36 sm:h-auto bg-muted shrink-0 relative border-b sm:border-b-0 sm:border-r border-border/50">
-                {court.image_url ? (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={cn("rounded-2xl overflow-hidden border shadow-sm mb-6 flex flex-col sm:flex-row", isEvent ? "bg-primary/5 border-primary/20" : "bg-card border-border")}>
+            <div className={cn("w-full sm:w-48 h-36 sm:h-auto shrink-0 relative border-b sm:border-b-0 sm:border-r", isEvent ? "bg-primary border-primary/20" : "bg-muted border-border/50")}>
+                {court.image_url && !isEvent ? (
                     <img src={court.image_url} alt={court.name} className="w-full h-full object-cover" />
                 ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-primary/10 to-muted flex items-center justify-center">
-                        <Trophy className="w-8 h-8 text-muted-foreground/30" />
+                    <div className="w-full h-full flex flex-col items-center justify-center text-primary-foreground/80 p-4 text-center">
+                        {isEvent ? <PartyPopper className="w-10 h-10 mb-2 opacity-90" /> : <Trophy className="w-8 h-8 text-muted-foreground/30" />}
+                        {isEvent && <span className="font-bold text-sm tracking-tight leading-tight opacity-90">Evento Exclusivo</span>}
                     </div>
                 )}
             </div>
             <div className="p-4 sm:p-5 flex-1 flex flex-col justify-center">
                 <div className="flex justify-between items-start mb-3 gap-2">
                     <h3 className="font-extrabold text-xl text-foreground">{court.name}</h3>
-                    <span className="bg-primary/10 text-primary px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider shrink-0">{court.surface}</span>
+                    <span className="bg-primary/10 text-primary px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider shrink-0">{isEvent ? `${durationHours} HORAS` : court.surface}</span>
                 </div>
                 <div className="space-y-2 text-sm text-muted-foreground">
                     <div className="flex items-center gap-2.5">
@@ -192,13 +217,13 @@ const Checkout = () => {
                     </div>
                     <div className="flex items-center gap-2.5">
                         <Clock className="w-4 h-4 text-primary shrink-0" />
-                        <span className="font-medium text-foreground/80">{time} a {endTime} hs</span>
+                        <span className="font-medium text-foreground/80">{time} a {endTime} hs {endHourRaw >= 24 ? "(Día sig.)" : ""}</span>
                     </div>
                 </div>
             </div>
         </motion.div>
 
-        {/* Contact info con validación visual en rojo */}
+        {/* Contact info */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="glass-card rounded-2xl p-5 mb-5 shadow-sm border border-border/50">
           <h3 className="font-bold text-base mb-4 flex items-center gap-2"><User className="w-4 h-4 text-primary" /> Tus datos</h3>
           <div className="space-y-3">
@@ -225,7 +250,7 @@ const Checkout = () => {
         </motion.div>
 
         {/* Addons */}
-        {addons.length > 0 && (
+        {addons.length > 0 && !isEvent && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="glass-card rounded-2xl p-5 mb-5 shadow-sm border border-border/50">
             <h3 className="font-bold text-base mb-4">¿Querés agregar extras?</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -248,7 +273,7 @@ const Checkout = () => {
           </motion.div>
         )}
 
-        {/* Payment Options (DINÁMICAS SEGÚN CONFIGURACIÓN) */}
+        {/* Payment Options */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="glass-card rounded-2xl p-5 mb-4 shadow-sm border border-border/50">
           <h3 className="font-bold text-base mb-4 flex items-center gap-2"><CreditCard className="w-4 h-4 text-primary" /> Opción de pago</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -276,7 +301,7 @@ const Checkout = () => {
           </div>
         </motion.div>
 
-        {/* Bottom bar mejorada */}
+        {/* Bottom bar */}
         <div className="fixed bottom-0 left-0 right-0 p-4 sm:p-5 bg-background/95 backdrop-blur-xl border-t border-border shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] z-30">
           <div className="container max-w-3xl mx-auto flex items-center justify-between gap-4">
             <div className="min-w-0">

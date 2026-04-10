@@ -721,3 +721,54 @@ export function useCreateBuffetPurchase() {
     }
   });
 }
+
+// --- HOOKS PARA FERIADOS ---
+export interface Holiday {
+    id: string;
+    facility_id: string;
+    date: string;
+    label: string;
+    is_closed: boolean;
+    custom_open_time?: string;
+    custom_close_time?: string;
+}
+
+export const useHolidays = () => {
+    const { data: facility } = useFacility();
+    return useQuery({
+        queryKey: ['holidays', facility?.id],
+        queryFn: async () => {
+            if (!facility?.id) return [];
+            const { data, error } = await supabase.from('holidays').select('*').eq('facility_id', facility.id).order('date', { ascending: true });
+            if (error) throw error;
+            return data as Holiday[];
+        },
+        enabled: !!facility?.id
+    });
+};
+
+export const useCreateHoliday = () => {
+    const queryClient = useQueryClient();
+    const { data: facility } = useFacility();
+    return useMutation({
+        mutationFn: async (newHoliday: Partial<Holiday>) => {
+            if (!facility?.id) throw new Error("No hay predio");
+            const { data, error } = await supabase.from('holidays').insert([{ ...newHoliday, facility_id: facility.id }]).select().single();
+            if (error) throw error;
+            return data;
+        },
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['holidays', facility?.id] })
+    });
+};
+
+export const useDeleteHoliday = () => {
+    const queryClient = useQueryClient();
+    const { data: facility } = useFacility();
+    return useMutation({
+        mutationFn: async (id: string) => {
+            const { error } = await supabase.from('holidays').delete().eq('id', id);
+            if (error) throw error;
+        },
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['holidays', facility?.id] })
+    });
+};

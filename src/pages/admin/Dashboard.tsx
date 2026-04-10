@@ -1,6 +1,6 @@
 import { useState } from "react";
 import AdminLayout from "@/components/layout/AdminLayout";
-import { useFacility, useCourts, useSports, useBookings, useCancelledBookings, useCreateBooking, useUpdateBooking, useDeleteBooking, useFacilitySchedules, type Booking, type Court } from "@/hooks/use-supabase-data";
+import { useFacility, useCourts, useSports, useBookings, useCancelledBookings, useCreateBooking, useUpdateBooking, useDeleteBooking, useFacilitySchedules, useHolidays, type Booking, type Court } from "@/hooks/use-supabase-data";
 import { cn } from "@/lib/utils";
 import { format, addDays, getDay } from "date-fns";
 import { es } from "date-fns/locale";
@@ -48,14 +48,37 @@ const AdminDashboard = () => {
   const deleteBooking = useDeleteBooking();
   const createBooking = useCreateBooking();
 
+// Traemos los feriados de la base de datos
+  const { data: holidays = [] } = useHolidays();
+  
+  // Verificamos si la fecha actual seleccionada es un feriado
+  const todayHoliday = holidays.find(h => h.date === dateStr);
+
   const jsDay = getDay(selectedDate); 
   const dayIdx = jsDay === 0 ? 6 : jsDay - 1; 
   const todaySchedule = schedules.find((s) => s.day_of_week === dayIdx);
-  const isClosed = todaySchedule ? !todaySchedule.is_open : false;
+  
+  let isClosed = false;
+  let openH = -1;
+  let closeH = -1;
 
-  const openH = todaySchedule?.is_open ? parseInt(todaySchedule.open_time.split(":")[0]) : (!todaySchedule ? 8 : -1);
-  let closeH = todaySchedule?.is_open ? parseInt(todaySchedule.close_time.split(":")[0]) : (!todaySchedule ? 23 : -1);
+  if (todayHoliday) {
+      // 🚨 MODO FERIADO ACTIVADO
+      isClosed = todayHoliday.is_closed;
+      if (!isClosed) {
+          openH = parseInt(todayHoliday.custom_open_time?.split(":")[0] || "12");
+          closeH = parseInt(todayHoliday.custom_close_time?.split(":")[0] || "23");
+      }
+  } else {
+      // 📅 MODO SEMANA NORMAL
+      isClosed = todaySchedule ? !todaySchedule.is_open : false;
+      if (!isClosed) {
+          openH = todaySchedule?.is_open ? parseInt(todaySchedule.open_time.split(":")[0]) : (!todaySchedule ? 8 : -1);
+          closeH = todaySchedule?.is_open ? parseInt(todaySchedule.close_time.split(":")[0]) : (!todaySchedule ? 23 : -1);
+      }
+  }
 
+  // Magia para los horarios que pasan la medianoche (ej: cierra a las 02:00 am)
   if (closeH <= openH && closeH >= 0) closeH += 24;
 
   const hours: string[] = [];
@@ -229,7 +252,17 @@ const AdminDashboard = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
         <div className="flex items-center gap-3">
             <button onClick={() => setSelectedDate(addDays(selectedDate, -1))} className="p-2 rounded-lg border border-border hover:bg-muted transition-colors"><ChevronLeft className="w-4 h-4" /></button>
-            <span className="font-bold capitalize min-w-[260px] whitespace-nowrap text-center">{format(selectedDate, "EEEE d 'de' MMMM, yyyy", { locale: es })}</span>
+            
+            <div className="flex flex-col items-center justify-center min-w-[260px]">
+                <span className="font-bold capitalize whitespace-nowrap text-center">{format(selectedDate, "EEEE d 'de' MMMM, yyyy", { locale: es })}</span>
+                {/* CARTELITO DE FERIADO */}
+                {todayHoliday && (
+                    <span className="text-[10px] bg-orange-500 text-white px-3 py-0.5 rounded-full font-bold mt-1 uppercase tracking-wider animate-in zoom-in duration-200 shadow-sm">
+                        ⭐ Feriado: {todayHoliday.label}
+                    </span>
+                )}
+            </div>
+
             <button onClick={() => setSelectedDate(addDays(selectedDate, 1))} className="p-2 rounded-lg border border-border hover:bg-muted transition-colors"><ChevronRight className="w-4 h-4" /></button>
             {!isToday && (
             <button onClick={() => setSelectedDate(new Date())} className="flex items-center gap-1.5 bg-primary text-primary-foreground px-3 py-1.5 rounded-full text-xs font-semibold hover:opacity-90 transition-opacity ml-2 shrink-0">
@@ -305,12 +338,21 @@ const AdminDashboard = () => {
                               className={cn("w-full rounded-xl p-2 flex flex-col justify-center text-left text-[11px] transition-all h-[56px] border", getSlotStyle(isSameBooking ? b00 : undefined))}>
                               {isSameBooking && b00 ? (
                                 <>
-                                  <p className="font-bold truncate text-xs w-full">{b00.user_name || "Sin nombre"}</p>
-                                  <div className="flex justify-between items-center w-full mt-0.5 opacity-90">
-                                      <span className="text-[10px] uppercase font-semibold tracking-wider">
-                                          {typeLabels[b00.booking_type] || b00.booking_type} • {courts.find(c => c.id === b00.court_id)?.is_event ? "EVENTO" : getSportName(courts.find(c => c.id === b00.court_id)?.sport_id || "")}
-                                      </span>
-                                      {b00.payment_status === "full" && <span className="text-[10px]">✅</span>}
+                                  {/* Ajustamos el layout a una columna flexible. El min-w-0 permite que el truncate funcione */}
+                                  <div className="flex flex-col h-full w-full min-w-0">
+                                    
+                                    {/* Contenedor superior para el nombre y el ✅ (así siempre están en la misma línea) */}
+                                    <div className="flex justify-between items-start w-full min-w-0">
+                                        <p className="font-bold truncate text-xs flex-1 pr-1">{b00.user_name || "Sin nombre"}</p>
+                                        {b00.payment_status === "full" && <span className="text-[10px] shrink-0">✅</span>}
+                                    </div>
+                                    
+                                    {/* Contenedor inferior para el tipo de reserva */}
+                                    <div className="mt-auto opacity-90 truncate w-full">
+                                        <span className="text-[9px] sm:text-[10px] uppercase font-semibold tracking-wider truncate block">
+                                            {typeLabels[b00.booking_type] || b00.booking_type} • {courts.find(c => c.id === b00.court_id)?.is_event ? "EVENTO" : getSportName(courts.find(c => c.id === b00.court_id)?.sport_id || "")}
+                                        </span>
+                                    </div>
                                   </div>
                                 </>
                               ) : (

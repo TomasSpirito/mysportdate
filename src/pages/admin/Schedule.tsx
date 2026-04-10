@@ -79,10 +79,15 @@ const AdminSchedule = () => {
             status = "full"; deposit = pricePerSession;
         }
         try {
+          // Calculamos la hora de fin (1 hora después)
+          const startDateTime = new Date(`${dateStr}T${form.hour}:00`);
+          const endDateTime = new Date(startDateTime.getTime() + 60 * 60000); // 60 mins
+
           await createBooking.mutateAsync({
             court_id: form.court_id, date: dateStr, time: form.hour, user_name: form.name.trim(), user_email: "", user_phone: form.phone.trim(),
             total_price: pricePerSession, deposit_amount: deposit, payment_status: status, booking_type: "fixed",
-          });
+            end_time: endDateTime.toISOString() // <-- ESTO ES CLAVE
+          } as any);
           created++;
         } catch { skipped++; }
       }
@@ -120,11 +125,28 @@ const AdminSchedule = () => {
   const handleAddExtraDate = async () => {
       if (!manageGroup || !extraDate) return;
       try {
+          // 1. Obtenemos la hora a la que juegan siempre (ej: "20:00")
+          const startTimeStr = format(new Date(manageGroup.main.start_time), "HH:mm");
+          
+          // 2. Calculamos la fecha y hora de fin exactas (1 hora después del inicio)
+          const startDateTime = new Date(`${extraDate}T${startTimeStr}:00`);
+          const endDateTime = new Date(startDateTime.getTime() + 60 * 60000); // 60 mins = 1 hora
+
+          // 3. Enviamos la reserva incluyendo el 'end_time'
           await createBooking.mutateAsync({
-              court_id: manageGroup.main.court_id, date: extraDate, time: format(new Date(manageGroup.main.start_time), "HH:mm"),
-              user_name: manageGroup.main.user_name, user_email: manageGroup.main.user_email, user_phone: manageGroup.main.user_phone,
-              total_price: manageGroup.main.total_price, deposit_amount: 0, payment_status: "none", booking_type: "fixed"
-          });
+              court_id: manageGroup.main.court_id, 
+              date: extraDate, 
+              time: startTimeStr,
+              user_name: manageGroup.main.user_name, 
+              user_email: manageGroup.main.user_email, 
+              user_phone: manageGroup.main.user_phone,
+              total_price: manageGroup.main.total_price, 
+              deposit_amount: 0, 
+              payment_status: "none", 
+              booking_type: "fixed",
+              end_time: endDateTime.toISOString() // <-- EL DATO ESTRELLA 🌟
+          } as any);
+          
           toast({ title: "Fecha extra agregada exitosamente" });
           setExtraDate("");
           setManageGroup(null);

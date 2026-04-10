@@ -129,7 +129,7 @@ const AdminCash = () => {
         const canchasData = bookings.map(b => ({
             Fecha: format(new Date(b.start_time), "dd/MM/yyyy"),
             Horario: `${format(new Date(b.start_time), "HH:mm")} - ${format(new Date(b.end_time), "HH:mm")}`,
-            Cancha: getCourtName(b.court_id),
+            Cancha: getCourtName(b.court_id) + (courts.find(c => c.id === b.court_id)?.is_event ? " (Evento)" : ""),
             Cliente: b.user_name || "Sin nombre",
             Tipo: b.booking_type === "online" ? "Online" : b.booking_type === "fixed" ? "Turno Fijo" : "Manual",
             Estado: b.payment_status === "full" ? "Pagado" : b.payment_status === "partial" ? "Pago Parcial" : "Debe Todo",
@@ -227,7 +227,10 @@ const AdminCash = () => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm truncate">{b.user_name || "Sin nombre"}</p>
-                    <p className="text-xs text-muted-foreground truncate">{format(new Date(b.start_time), "d MMM, HH:mm", { locale: es })} hs • {getCourtName(b.court_id)}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                        {format(new Date(b.start_time), "d MMM, HH:mm", { locale: es })} hs • {getCourtName(b.court_id)}
+                        {courts.find(c => c.id === b.court_id)?.is_event && " 🎉 (Evento)"}
+                    </p>
                   </div>
                   <div className="text-right flex flex-col items-end gap-1 shrink-0">
                     <p className="font-black text-orange-500 text-base">${pendingAmount.toLocaleString()}</p>
@@ -260,10 +263,14 @@ const AdminCash = () => {
                 <p className="font-bold text-sm truncate">{b.user_name || "Sin nombre"}</p>
                 <p className="text-xs text-muted-foreground truncate">{format(new Date(b.start_time), "d MMM, HH:mm", { locale: es })} hs • {getCourtName(b.court_id)}</p>
                 {/* TIPO DE RESERVA */}
-                <span className={cn("px-2 py-0.5 mt-1 inline-block rounded-md text-[10px] font-bold",
-                  b.booking_type === "online" ? "bg-primary/10 text-primary" : b.booking_type === "fixed" ? "bg-info/10 text-info" : "bg-destructive/10 text-destructive"
+                <span className={cn("px-2 py-0.5 mt-1 inline-block rounded-md text-[10px] font-bold mr-2",
+                  courts.find(c => c.id === b.court_id)?.is_event ? "bg-purple-500/10 text-purple-600" :
+                  b.booking_type === "online" ? "bg-primary/10 text-primary" : 
+                  b.booking_type === "fixed" ? "bg-info/10 text-info" : "bg-destructive/10 text-destructive"
                 )}>
-                  {b.booking_type === "online" ? "App" : b.booking_type === "fixed" ? "Fijo" : "Manual"}
+                  {courts.find(c => c.id === b.court_id)?.is_event ? "🎉 Evento" : 
+                  b.booking_type === "online" ? "App" : 
+                  b.booking_type === "fixed" ? "Fijo" : "Manual"}
                 </span>
               </div>
               <div className="text-right flex flex-col items-end shrink-0">
