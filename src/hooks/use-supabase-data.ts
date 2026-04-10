@@ -4,7 +4,7 @@ import { useFacilityId } from "@/contexts/FacilityContext";
 import { useState } from "react";
 
 export interface Sport { id: string; name: string; icon: string; }
-export interface Court { id: string; facility_id: string; sport_id: string; name: string; surface: string | null; price_per_hour: number; features: string[]; image: string | null; image_url?: string; }
+export interface Court { id: string; facility_id: string; sport_id: string; name: string; surface: string | null; price_per_hour: number; features: string[]; image: string | null; image_url?: string; shared_group_id?: string; is_event?: boolean; duration_minutes?: number; }
 export interface Addon { id: string; facility_id: string; name: string; price: number; icon: string; requires_stock: boolean; }
 export interface Booking { id: string; court_id: string; user_id: string | null; user_name: string | null; user_email?: string | null; user_phone?: string | null; start_time: string; end_time: string; total_price: number; deposit_amount: number; status: string; payment_status: string; booking_type: string; created_at: string; cancellation_token?: string; cancelled_at?: string | null; }
 export interface Expense { id: string; facility_id: string; category: string; description: string | null; amount: number; expense_date: string; created_at: string; }
@@ -12,7 +12,7 @@ export interface FacilitySchedule { id: string; facility_id: string; day_of_week
 export interface BuffetProduct { id: string; facility_id: string; name: string; category: string; price: number; stock: number; image: string | null; image_url?: string; created_at: string; }
 export interface BuffetSale { id: string; facility_id: string; total: number; created_at: string; }
 export interface BuffetSaleItem { id: string; sale_id: string; product_id: string | null; product_name: string; quantity: number; unit_price: number; }
-export interface Facility { id: string; name: string; slug?: string | null; location: string | null; open_time: string; close_time: string; owner_id: string | null; phone: string | null; email: string | null; whatsapp: string | null;description?: string | null; maps_url?: string | null; instagram_url?: string | null; logo_url?: string | null; cover_url?: string | null; amenities?: string[]; cancellation_window_hours?: number; }
+export interface Facility { id: string; name: string; slug?: string | null; location: string | null; open_time: string; close_time: string; owner_id: string | null; phone: string | null; email: string | null; whatsapp: string | null;description?: string | null; maps_url?: string | null; instagram_url?: string | null; logo_url?: string | null; cover_url?: string | null; amenities?: string[]; cancellation_window_hours?: number; default_event_duration?: number; default_event_includes?: string;  }
 // ── Queries ──
 
 export function useFacility() {
@@ -224,21 +224,42 @@ export function useCreateBooking() {
     mutationFn: async (params: {
       court_id: string; date: string; time: string; user_name: string; user_email: string; user_phone: string;
       total_price: number; deposit_amount: number; payment_status: string; booking_type?: string; addon_ids?: string[];
+      end_time?: string; // <-- NUEVO: Le avisamos que ahora puede recibir la hora de fin
     }) => {
-      const startHour = parseInt(params.time.split(":")[0]);
+      // Mantenemos el start_time con tu zona horaria
       const start_time = `${params.date}T${params.time}:00-03:00`;
-      const end_time = `${params.date}T${(startHour + 1).toString().padStart(2, "0")}:00:00-03:00`;
+      
+      // NUEVO: Si el formulario nos manda el end_time real, lo usamos. 
+      // Si no (por ejemplo, desde otra parte de la app), le sumamos 1 hora por defecto para que no se rompa.
+      let final_end_time;
+      if (params.end_time) {
+          final_end_time = params.end_time;
+      } else {
+          const startHour = parseInt(params.time.split(":")[0]);
+          final_end_time = `${params.date}T${(startHour + 1).toString().padStart(2, "0")}:00:00-03:00`;
+      }
+
       const { data, error } = await supabase.rpc("create_booking" as any, {
-        p_court_id: params.court_id, p_start_time: start_time, p_end_time: end_time,
-        p_user_name: params.user_name, p_user_email: params.user_email, p_user_phone: params.user_phone,
-        p_total_price: params.total_price, p_deposit_amount: params.deposit_amount,
-        p_payment_status: params.payment_status, p_booking_type: params.booking_type || "online",
+        p_court_id: params.court_id, 
+        p_start_time: start_time, 
+        p_end_time: final_end_time, // <-- Pasamos el end_time correcto a Supabase
+        p_user_name: params.user_name, 
+        p_user_email: params.user_email, 
+        p_user_phone: params.user_phone,
+        p_total_price: params.total_price, 
+        p_deposit_amount: params.deposit_amount,
+        p_payment_status: params.payment_status, 
+        p_booking_type: params.booking_type || "online",
         p_addon_ids: params.addon_ids || [],
       });
+      
       if (error) throw error;
       return data as string;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["bookings"] }); qc.invalidateQueries({ queryKey: ["bookings-range"] }); },
+    onSuccess: () => { 
+      qc.invalidateQueries({ queryKey: ["bookings"] }); 
+      qc.invalidateQueries({ queryKey: ["bookings-range"] }); 
+    },
   });
 }
 

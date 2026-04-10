@@ -1,13 +1,11 @@
 import { useState } from "react";
 import AdminLayout from "@/components/layout/AdminLayout";
-// IMPORTANTE: Sumamos useFacility a los hooks
-import { useFacility, useCourts, useBookings, useCancelledBookings, useCreateBooking, useUpdateBooking, useDeleteBooking, useFacilitySchedules, type Booking } from "@/hooks/use-supabase-data";
+import { useFacility, useCourts, useSports, useBookings, useCancelledBookings, useCreateBooking, useUpdateBooking, useDeleteBooking, useFacilitySchedules, type Booking, type Court } from "@/hooks/use-supabase-data";
 import { cn } from "@/lib/utils";
 import { format, addDays, getDay } from "date-fns";
 import { es } from "date-fns/locale";
 import { ChevronLeft, ChevronRight, X, Phone, Mail, CalendarCheck, AlertCircle, CreditCard, Banknote, SmartphoneNfc } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-
 
 const typeLabels: Record<string, string> = { online: "Online", fixed: "Fijo", manual: "Manual" };
 
@@ -21,27 +19,30 @@ const AdminDashboard = () => {
   const today = new Date();
   const [selectedDate, setSelectedDate] = useState(today);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
-  const [manualSlot, setManualSlot] = useState<{ courtId: string; hour: string } | null>(null);
+  
+  // CORRECCIÓN 1: manualSlot ahora guarda "pc" (la columna entera) en lugar de "courtId"
+  const [manualSlot, setManualSlot] = useState<{ pc: any; hour: string } | null>(null);
   
   const [courtFilter, setCourtFilter] = useState<string>("all");
 
+  // CORRECCIÓN 2: Agregamos selectedVirtualCourtId al estado del formulario
   const [manualForm, setManualForm] = useState({ 
-      name: "", email: "", phone: "", paymentStatus: "none", paymentMethod: "efectivo", depositAmount: "" 
+      name: "", email: "", phone: "", paymentStatus: "none", paymentMethod: "efectivo", depositAmount: "",
+      duration: 60, customPrice: "", startTime: "", selectedVirtualCourtId: "" 
   });
   
   const [collectMethod, setCollectMethod] = useState("efectivo");
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelReason, setCancelReason] = useState("client_excused");
   const [refundStatus, setRefundStatus] = useState("none");
-
+  
   const dateStr = format(selectedDate, "yyyy-MM-dd");
   
-  // TRAEMOS LA CONFIGURACIÓN DEL PREDIO
   const { data: facility } = useFacility();
-  
   const { data: courts = [] } = useCourts();
+  const { data: sports = [] } = useSports();
   const { data: bookings = [] } = useBookings(dateStr);
-  const { data: cancelledBookings = [] } = useCancelledBookings(dateStr); // <-- NUEVO
+  const { data: cancelledBookings = [] } = useCancelledBookings(dateStr);
   const { data: schedules = [] } = useFacilitySchedules();
   const updateBooking = useUpdateBooking();
   const deleteBooking = useDeleteBooking();
@@ -65,29 +66,37 @@ const AdminDashboard = () => {
     }
   }
 
-  const visibleCourts = courtFilter === "all" ? courts : courts.filter(c => c.id === courtFilter);
+  // --- MAGIA DE AGRUPACIÓN FÍSICA ---
+  const physicalCourts = courts.reduce((acc, current) => {
+      const key = current.shared_group_id || current.id;
+      const existing = acc.find(c => c.key === key);
+      if (existing) {
+          existing.virtualCourts.push(current);
+      } else {
+          acc.push({ key, name: current.name, virtualCourts: [current] });
+      }
+      return acc;
+  }, [] as { key: string; name: string; virtualCourts: Court[] }[]);
 
-  
+  const visiblePhysicalCourts = courtFilter === "all" ? physicalCourts : physicalCourts.filter(pc => pc.key === courtFilter);
 
-  const getBooking = (courtId: string, hour: string) =>
-      bookings.find((b) => { 
-        // new Date() lee la hora de Londres y la convierte a tu hora local automáticamente
-        const dateObj = new Date(b.start_time);
-        const bHour = dateObj.getHours().toString().padStart(2, "0");
-        // Armamos el texto "HH:00" para que coincida con la grilla
-        return b.court_id === courtId && `${bHour}:00` === hour; 
-      });
+  const getBookingGroup = (courtIds: string[], hour: string) => {
+    return bookings.find((b) => {
+      if (!courtIds.includes(b.court_id)) return false;
 
+      const start = new Date(b.start_time);
+      const end = b.end_time ? new Date(b.end_time) : new Date(start.getTime() + 60 * 60000);
+      const slotTime = new Date(selectedDate);
+      const [h, m] = hour.split(':');
+      slotTime.setHours(parseInt(h), parseInt(m), 0, 0);
+
+      return slotTime >= start && slotTime < end;
+    });
+  };
+
+  const getSportName = (sportId: string) => sports.find((s) => s.id === sportId)?.name || "Deporte";
   const getCourtName = (courtId: string) => courts.find((c) => c.id === courtId)?.name || "";
   const getCourtPrice = (courtId: string) => courts.find((c) => c.id === courtId)?.price_per_hour || 0;
-
-  // Calculador matemático de la seña según la configuración del predio
-  const getRequiredDeposit = (courtId: string) => {
-      if (!facility?.requires_deposit) return 0;
-      const price = getCourtPrice(courtId);
-      const percentage = facility.deposit_percentage || 50;
-      return (price * percentage) / 100;
-  };
 
   const getSlotStyle = (booking?: Booking) => {
     if (!booking) return "bg-slot-free border border-slot-free-border hover:bg-primary/10 cursor-pointer";
@@ -100,10 +109,7 @@ const AdminDashboard = () => {
   const handleCollect = async () => {
     if (!selectedBooking) return;
     await updateBooking.mutateAsync({ 
-        id: selectedBooking.id, 
-        payment_status: "full", 
-        deposit_amount: selectedBooking.total_price,
-        payment_method: collectMethod 
+        id: selectedBooking.id, payment_status: "full", deposit_amount: selectedBooking.total_price, payment_method: collectMethod 
     } as any);
     toast({ title: "Pago registrado en caja ✅" });
     setSelectedBooking(null);
@@ -111,33 +117,50 @@ const AdminDashboard = () => {
 
   const handleConfirmCancel = async () => {
     if (!selectedBooking) return;
-    
     await updateBooking.mutateAsync({ 
-        id: selectedBooking.id, 
-        status: "cancelled",
-        cancelled_at: new Date().toISOString(),
-        cancellation_reason: cancelReason,
-        refund_status: selectedBooking.deposit_amount > 0 ? refundStatus : "none"
+        id: selectedBooking.id, status: "cancelled", cancelled_at: new Date().toISOString(), cancellation_reason: cancelReason, refund_status: selectedBooking.deposit_amount > 0 ? refundStatus : "none"
     } as any);
-    
     toast({ title: "Reserva cancelada y cancha liberada" });
     setSelectedBooking(null);
     setIsCancelling(false);
   };
 
-  const handleSlotClick = (courtId: string, hour: string) => {
-    setIsCancelling(false); // <-- AGREGAR ESTO
-    const booking = getBooking(courtId, hour);
+  const getRequiredDeposit = (priceNum: number) => {
+      if (!facility?.requires_deposit) return 0;
+      const percentage = facility.deposit_percentage || 50;
+      return (priceNum * percentage) / 100;
+  };
+
+  const handleSlotClick = (pc: any, hour: string) => {
+    setIsCancelling(false);
+    const courtIds = pc.virtualCourts.map((c: Court) => c.id);
+    const booking = getBookingGroup(courtIds, hour);
+    
     if (booking) {
       setSelectedBooking(booking);
       setCollectMethod(booking.payment_method || "efectivo");
     } else {
-      setManualSlot({ courtId, hour });
-      setManualForm({ name: "", email: "", phone: "", paymentStatus: "none", paymentMethod: "efectivo", depositAmount: "" });
+      setManualSlot({ pc, hour });
+      
+      // Buscamos la primera variante que NO sea evento para ponerla por defecto.
+      // Si por alguna razón la cancha es SÓLO para eventos (raro, pero posible), agarra la primera.
+      const firstVariant = pc.virtualCourts.find((c: Court) => !c.is_event) || pc.virtualCourts[0];
+      
+      // Asegurarnos de calcular bien la duración y el precio inicial
+      const initialDuration = firstVariant.is_event ? (firstVariant.duration_minutes || 180) : 60;
+      const initialPrice = firstVariant.price_per_hour * (initialDuration / 60);
+
+      setManualForm({ 
+          name: "", email: "", phone: "", paymentStatus: "none", paymentMethod: "efectivo", depositAmount: "",
+          duration: initialDuration, 
+          customPrice: initialPrice.toString(), 
+          startTime: hour,
+          selectedVirtualCourtId: firstVariant.id
+      });
     }
   };
 
- const handleCreateManual = async () => {
+  const handleCreateManual = async () => {
     const nameStr = manualForm.name.trim();
     const emailStr = manualForm.email.trim();
     const phoneStr = manualForm.phone.trim();
@@ -147,7 +170,6 @@ const AdminDashboard = () => {
       return;
     }
 
-    // VALIDACIONES CON REGEX
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(emailStr)) {
       toast({ title: "Email inválido", description: "Por favor ingresá un correo electrónico real.", variant: "destructive" });
@@ -160,26 +182,31 @@ const AdminDashboard = () => {
       return;
     }
     
-    try {
-      const price = getCourtPrice(manualSlot.courtId);
+   try {
+      // CORRECCIÓN 3: Sacamos el fallback erróneo al courtId
+      const finalPrice = Number(manualForm.customPrice) || 0;
       let finalDeposit = 0;
 
       if (manualForm.paymentStatus === "full") {
-          finalDeposit = price;
+          finalDeposit = finalPrice;
       } else if (manualForm.paymentStatus === "partial" && facility?.requires_deposit) {
-          finalDeposit = getRequiredDeposit(manualSlot.courtId);
+          finalDeposit = getRequiredDeposit(finalPrice);
       }
       
       const isPaying = manualForm.paymentStatus !== "none";
+      const startDateTime = new Date(`${dateStr}T${manualForm.startTime}:00`);
+      const endDateTime = new Date(startDateTime.getTime() + manualForm.duration * 60000);
       
       await createBooking.mutateAsync({
-        court_id: manualSlot.courtId, date: dateStr, time: manualSlot.hour,
+        court_id: manualForm.selectedVirtualCourtId, // CORRECCIÓN 4: Mandamos la ID de la variante elegida
+        date: dateStr, time: manualForm.startTime,
         user_name: nameStr, user_email: emailStr, user_phone: phoneStr,
-        total_price: price, 
+        total_price: finalPrice, 
         deposit_amount: finalDeposit, 
         payment_status: manualForm.paymentStatus, 
         booking_type: "manual",
-        payment_method: isPaying ? manualForm.paymentMethod : null 
+        payment_method: isPaying ? manualForm.paymentMethod : null,
+        end_time: endDateTime.toISOString()
       } as any);
       
       toast({ title: "Reserva agendada exitosamente ✅" });
@@ -202,7 +229,6 @@ const AdminDashboard = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
         <div className="flex items-center gap-3">
             <button onClick={() => setSelectedDate(addDays(selectedDate, -1))} className="p-2 rounded-lg border border-border hover:bg-muted transition-colors"><ChevronLeft className="w-4 h-4" /></button>
-            {/* CORRECCIÓN VISUAL: Añadimos min-w-[260px] y whitespace-nowrap para que la fecha y el año no se partan */}
             <span className="font-bold capitalize min-w-[260px] whitespace-nowrap text-center">{format(selectedDate, "EEEE d 'de' MMMM, yyyy", { locale: es })}</span>
             <button onClick={() => setSelectedDate(addDays(selectedDate, 1))} className="p-2 rounded-lg border border-border hover:bg-muted transition-colors"><ChevronRight className="w-4 h-4" /></button>
             {!isToday && (
@@ -229,9 +255,9 @@ const AdminDashboard = () => {
           <button onClick={() => setCourtFilter("all")} className={cn("px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-colors", courtFilter === "all" ? "bg-card border border-primary text-primary shadow-sm" : "bg-muted text-muted-foreground hover:bg-card border border-transparent")}>
               Todas las canchas
           </button>
-          {courts.map(c => (
-              <button key={c.id} onClick={() => setCourtFilter(c.id)} className={cn("px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-colors", courtFilter === c.id ? "bg-card border border-primary text-primary shadow-sm" : "bg-muted text-muted-foreground hover:bg-card border border-transparent")}>
-                  {c.name}
+          {physicalCourts.map(pc => (
+              <button key={pc.key} onClick={() => setCourtFilter(pc.key)} className={cn("px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-colors", courtFilter === pc.key ? "bg-card border border-primary text-primary shadow-sm" : "bg-muted text-muted-foreground hover:bg-card border border-transparent")}>
+                  {pc.name}
               </button>
           ))}
       </div>
@@ -247,39 +273,77 @@ const AdminDashboard = () => {
           <table className="w-full" style={{ tableLayout: "fixed" }}>
             <colgroup>
               <col style={{ width: "80px" }} />
-              {visibleCourts.map((c) => (<col key={c.id} />))}
+              {visiblePhysicalCourts.map((pc) => (<col key={pc.key} />))}
             </colgroup>
             <thead>
               <tr className="bg-muted/40 border-b border-border">
                 <th className="text-center text-xs font-bold p-3 text-muted-foreground">Hora</th>
-                {visibleCourts.map((c) => (<th key={c.id} className="text-center text-sm font-bold p-3 truncate">{c.name}</th>))}
+                {visiblePhysicalCourts.map((pc) => (<th key={pc.key} className="text-center text-sm font-bold p-3 truncate">{pc.name}</th>))}
               </tr>
             </thead>
             <tbody>
-              {hours.map((hour, idx) => (
-                <tr key={hour} className={cn("border-b border-border/50 last:border-0", idx % 2 === 0 ? "bg-transparent" : "bg-muted/10")}>
-                  <td className="text-xs font-bold font-mono p-3 text-center text-muted-foreground border-r border-border/50">{hour}</td>
-                  {visibleCourts.map((court) => {
-                    const booking = getBooking(court.id, hour);
-                    return (
-                      <td key={court.id} className="p-1.5 border-r border-border/50 last:border-0">
-                        <button onClick={() => handleSlotClick(court.id, hour)}
-                          className={cn("w-full rounded-xl p-2 flex flex-col justify-center text-left text-[11px] transition-all h-[56px] border", getSlotStyle(booking))}>
-                          {booking && (
-                            <>
-                              <p className="font-bold truncate text-xs w-full">{booking.user_name || "Sin nombre"}</p>
-                              <div className="flex justify-between items-center w-full mt-0.5 opacity-90">
-                                  <span className="text-[10px] uppercase font-semibold tracking-wider">{typeLabels[booking.booking_type] || booking.booking_type}</span>
-                                  {booking.payment_status === "full" && <span className="text-[10px]">✅</span>}
-                              </div>
-                            </>
+              {hours.map((hour, idx) => {
+                const h = hour.split(':')[0];
+
+                return (
+                  <tr key={hour} className={cn("border-b border-border/50 last:border-0", idx % 2 === 0 ? "bg-transparent" : "bg-muted/10")}>
+                    <td className="text-xs font-bold font-mono p-3 text-center text-muted-foreground border-r border-border/50 align-top">{h}:00</td>
+                    
+                    {visiblePhysicalCourts.map((pc) => {
+                      const courtIds = pc.virtualCourts.map(c => c.id);
+                      const b00 = getBookingGroup(courtIds, `${h}:00`);
+                      const b30 = getBookingGroup(courtIds, `${h}:30`);
+
+                      const isCompletelyFree = !b00 && !b30;
+                      const isSameBooking = b00 && b30 && b00.id === b30.id;
+                      const showSingleBlock = isCompletelyFree || isSameBooking;
+
+                      return (
+                        <td key={pc.key} className="p-1 border-r border-border/50 last:border-0 align-top">
+                          {showSingleBlock ? (
+                            <button onClick={() => handleSlotClick(pc, `${h}:00`)}
+                              className={cn("w-full rounded-xl p-2 flex flex-col justify-center text-left text-[11px] transition-all h-[56px] border", getSlotStyle(isSameBooking ? b00 : undefined))}>
+                              {isSameBooking && b00 ? (
+                                <>
+                                  <p className="font-bold truncate text-xs w-full">{b00.user_name || "Sin nombre"}</p>
+                                  <div className="flex justify-between items-center w-full mt-0.5 opacity-90">
+                                      <span className="text-[10px] uppercase font-semibold tracking-wider">
+                                          {typeLabels[b00.booking_type] || b00.booking_type} • {courts.find(c => c.id === b00.court_id)?.is_event ? "EVENTO" : getSportName(courts.find(c => c.id === b00.court_id)?.sport_id || "")}
+                                      </span>
+                                      {b00.payment_status === "full" && <span className="text-[10px]">✅</span>}
+                                  </div>
+                                </>
+                              ) : (
+                                <span className="text-[10px] font-semibold opacity-0 hover:opacity-50 transition-opacity block w-full text-center">+ Nueva Reserva</span>
+                              )}
+                            </button>
+                          ) : (
+                            <div className="flex flex-col h-[56px] gap-1">
+                              <button onClick={() => handleSlotClick(pc, `${h}:00`)}
+                                className={cn("w-full rounded-md px-2 flex flex-col justify-center text-left transition-all flex-1 border overflow-hidden", getSlotStyle(b00))}>
+                                {b00 ? (
+                                  <div className="flex justify-between items-center w-full">
+                                    <span className="font-bold truncate text-[10px]">{b00.user_name || "Ocupado"}</span>
+                                  </div>
+                                ) : ( <span className="text-[9px] font-semibold opacity-0 hover:opacity-50 transition-opacity block w-full text-center">+ 00 min</span> )}
+                              </button>
+                              
+                              <button onClick={() => handleSlotClick(pc, `${h}:30`)}
+                                className={cn("w-full rounded-md px-2 flex flex-col justify-center text-left transition-all flex-1 border overflow-hidden", getSlotStyle(b30))}>
+                                {b30 ? (
+                                  <div className="flex justify-between items-center w-full">
+                                    <span className="font-bold truncate text-[10px]">{b30.user_name || "Ocupado"}</span>
+                                  </div>
+                                ) : ( <span className="text-[9px] font-semibold opacity-0 hover:opacity-50 transition-opacity block w-full text-center">+ 30 min</span> )}
+                              </button>
+                            </div>
                           )}
-                        </button>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -332,27 +396,23 @@ const AdminDashboard = () => {
               <div className="border-t border-border border-dashed my-4" />
               
               <div className="flex justify-between items-center">
-                {/* Cambiamos font-medium a font-bold para unificar pesos */}
                 <span className="text-muted-foreground font-bold">Costo Total</span>
                 <span className="font-black text-lg">${selectedBooking.total_price.toLocaleString()}</span>
               </div>
               
               <div className="flex justify-between items-center">
-                {/* Cambiamos font-medium a font-bold para unificar pesos */}
                 <span className="text-muted-foreground font-bold">Abonado</span>
                 <span className="font-black text-lg text-primary">${selectedBooking.deposit_amount.toLocaleString()}</span>
               </div>
               
               {selectedBooking.total_price > selectedBooking.deposit_amount && (
                 <div className="flex justify-between items-center bg-orange-500/10 p-3 rounded-xl border border-orange-500/20 mt-2">
-                    {/* Esta ya era font-bold, ahora todo el bloque coincide perfectamente */}
                     <span className="text-orange-700 font-bold">Resta Cobrar</span>
                     <span className="font-black text-orange-600 text-lg">${(selectedBooking.total_price - selectedBooking.deposit_amount).toLocaleString()}</span>
                 </div>
               )}
             </div>
 
-            {/* SECCIÓN DE COBRO CON MÉTODO DE PAGO */}
             {(selectedBooking.payment_status === "partial" || selectedBooking.payment_status === "none") && (
               <div className="bg-muted/30 p-4 rounded-xl border border-border space-y-3 mt-auto">
                   <label className="text-xs font-bold text-muted-foreground block">¿Cómo abona el saldo restante?</label>
@@ -372,7 +432,6 @@ const AdminDashboard = () => {
               </div>
             )}
             
-            {/* ZONA DE CANCELACIÓN AVANZADA */}
             {!isCancelling ? (
               <button onClick={() => setIsCancelling(true)} disabled={deleteBooking.isPending || updateBooking.isPending}
                 className="w-full mt-3 border-2 border-destructive/20 text-destructive py-2.5 rounded-xl text-sm font-bold hover:bg-destructive hover:text-white transition-colors disabled:opacity-50">
@@ -384,7 +443,7 @@ const AdminDashboard = () => {
                   
                   <div>
                       <label className="text-xs font-bold text-muted-foreground mb-1 block">Motivo de la cancelación</label>
-                      <select className="w-full appearance-none border-2 border-border/50 rounded-xl px-4 py-3 text-sm font-semibold bg-muted/30 outline-none focus:border-destructive focus:bg-background transition-all cursor-pointer" style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }} 
+                      <select className="w-full appearance-none border-2 border-border/50 rounded-xl px-4 py-3 text-sm font-semibold bg-muted/30 outline-none focus:border-destructive focus:bg-background transition-all cursor-pointer" 
                               value={cancelReason} onChange={(e) => setCancelReason(e.target.value)}>
                           <option value="client_excused">Avisó con tiempo (Cliente)</option>
                           <option value="no_show">Faltó sin avisar (No Show)</option>
@@ -395,7 +454,7 @@ const AdminDashboard = () => {
                   {selectedBooking.deposit_amount > 0 && (
                       <div>
                           <label className="text-xs font-bold text-muted-foreground mb-1 block">¿Qué hacemos con los ${selectedBooking.deposit_amount} abonados?</label>
-                          <select className="w-full appearance-none border-2 border-border/50 rounded-xl px-4 py-3 text-sm font-semibold bg-muted/30 outline-none focus:border-destructive focus:bg-background transition-all cursor-pointer" style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }} 
+                          <select className="w-full appearance-none border-2 border-border/50 rounded-xl px-4 py-3 text-sm font-semibold bg-muted/30 outline-none focus:border-destructive focus:bg-background transition-all cursor-pointer" 
                                   value={refundStatus} onChange={(e) => setRefundStatus(e.target.value)}>
                               <option value="none">Seleccionar acción...</option>
                               <option value="kept">Retener el dinero (Penalidad)</option>
@@ -428,8 +487,89 @@ const AdminDashboard = () => {
             </div>
             
             <div className="bg-primary/10 border border-primary/20 rounded-xl p-3 mb-5">
-              <p className="font-bold text-primary">{getCourtName(manualSlot.courtId)}</p>
-              <p className="text-xs font-semibold text-primary/80">{format(selectedDate, "EEEE d 'de' MMMM", { locale: es })} • {manualSlot.hour} hs</p>
+              {/* CORRECCIÓN 5: Usamos el nombre de la cancha física (pc) */}
+              <p className="font-bold text-primary">{manualSlot.pc.name}</p>
+              <div className="flex items-center gap-2 mt-1">
+                <p className="text-xs font-semibold text-primary/80">{format(selectedDate, "EEEE d 'de' MMMM", { locale: es })} •</p>
+                <select 
+                    className="bg-background border border-primary/30 rounded-md text-xs font-bold text-primary p-1 outline-none cursor-pointer"
+                    value={manualForm.startTime}
+                    onChange={(e) => setManualForm({...manualForm, startTime: e.target.value})}
+                >
+                    <option value={`${manualSlot.hour.split(':')[0]}:00`}>{manualSlot.hour.split(':')[0]}:00 hs</option>
+                    <option value={`${manualSlot.hour.split(':')[0]}:30`}>{manualSlot.hour.split(':')[0]}:30 hs</option>
+                </select>
+              </div>
+            </div>
+
+            {/* CORRECCIÓN 6: Selector inteligente (Detecta Eventos) */}
+            {manualSlot.pc.virtualCourts.length > 1 && (
+                <div className="mb-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <label className="text-xs font-bold text-muted-foreground mb-1.5 block">Variante a reservar</label>
+                    <select 
+                        className="w-full border-2 border-primary/30 rounded-xl px-3 py-2.5 text-sm bg-primary/5 outline-none focus:border-primary font-bold text-primary cursor-pointer"
+                        value={manualForm.selectedVirtualCourtId}
+                        onChange={(e) => {
+                            const selectedCourt = manualSlot.pc.virtualCourts.find((c: Court) => c.id === e.target.value);
+                            
+                            // Si elige evento, le clavamos su duración por defecto (ej: 180 min). Si no, 60 min.
+                            const autoDuration = selectedCourt.is_event ? (selectedCourt.duration_minutes || 180) : 60;
+                            const calculatedPrice = selectedCourt.price_per_hour * (autoDuration / 60);
+
+                            setManualForm({ 
+                                ...manualForm, 
+                                selectedVirtualCourtId: e.target.value,
+                                duration: autoDuration, // Actualizamos la duración en el formulario
+                                customPrice: calculatedPrice.toString() // Calculamos el precio total
+                            });
+                        }}
+                    >
+                        {manualSlot.pc.virtualCourts.map((c: Court) => (
+                            <option key={c.id} value={c.id}>
+                                {c.is_event 
+                                    ? `🎉 Evento / Cumpleaños - $${c.price_per_hour}/hora` 
+                                    : `${getSportName(c.sport_id) || "Cancha"} - $${c.price_per_hour}/hora`}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3 mb-4">
+                <div>
+                    <label className="text-xs font-bold text-muted-foreground mb-1.5 block">Duración</label>
+                    <select 
+                        className="w-full border-2 border-border/50 rounded-xl px-3 py-2.5 text-sm bg-background outline-none focus:border-primary font-bold cursor-pointer"
+                        value={manualForm.duration}
+                        onChange={(e) => {
+                            const newDuration = Number(e.target.value);
+                            // CORRECCIÓN 7: Buscamos el precio usando la variante seleccionada, no courtId
+                            const basePrice = getCourtPrice(manualForm.selectedVirtualCourtId);
+                            const calculatedPrice = basePrice * (newDuration / 60);
+                            
+                            setManualForm({ 
+                                ...manualForm, 
+                                duration: newDuration, 
+                                customPrice: calculatedPrice.toString() 
+                            });
+                        }}
+                    >
+                        <option value={60}>1 hora</option>
+                        <option value={90}>1.5 horas</option>
+                        <option value={120}>2 horas</option>
+                        <option value={150}>2.5 horas</option>
+                        {facility?.has_events && <option value={180}>3 horas (Evento)</option>}
+                    </select>
+                </div>
+                <div>
+                    <label className="text-xs font-bold text-muted-foreground mb-1.5 block">Precio Final ($)</label>
+                    <input 
+                        type="number"
+                        className="w-full border-2 border-border/50 rounded-xl px-3 py-2.5 text-sm bg-background outline-none focus:border-primary font-bold text-primary" 
+                        value={manualForm.customPrice} 
+                        onChange={(e) => setManualForm({ ...manualForm, customPrice: e.target.value })} 
+                    />
+                </div>
             </div>
 
             <div className="space-y-4">
@@ -448,7 +588,6 @@ const AdminDashboard = () => {
                   </div>
               </div>
 
-              {/* LÓGICA DE SEÑA CONDICIONADA AL PREDIO */}
               <div className="pt-2 border-t border-border/50">
                   <label className="text-xs font-bold text-muted-foreground mb-2 block">Estado del Pago Inicial</label>
                   
@@ -468,18 +607,16 @@ const AdminDashboard = () => {
                       </button>
                   </div>
 
-                  {/* INPUT SEÑA LECTURA (Cálculo Automático) */}
                   {manualForm.paymentStatus === "partial" && facility?.requires_deposit && (
                       <div className="mb-3 animate-in fade-in slide-in-from-top-2 duration-200">
                           <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1.5 block">Monto de la seña ({facility.deposit_percentage}%)</label>
                           <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-bold">$</span>
-                            <input type="number" readOnly className="w-full border-2 border-border/50 rounded-xl pl-7 pr-3 py-2 text-sm bg-muted outline-none font-bold text-foreground cursor-not-allowed" value={getRequiredDeposit(manualSlot.courtId)} />
+                            <input type="number" readOnly className="w-full border-2 border-border/50 rounded-xl pl-7 pr-3 py-2 text-sm bg-muted outline-none font-bold text-foreground cursor-not-allowed" value={getRequiredDeposit(Number(manualForm.customPrice))} />
                           </div>
                       </div>
                   )}
 
-                  {/* METODO DE PAGO (SOLO SI HAY PAGO) */}
                   {(manualForm.paymentStatus === "full" || manualForm.paymentStatus === "partial") && (
                       <div className="animate-in fade-in slide-in-from-top-2 duration-200">
                           <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1.5 block">¿Cómo abonó?</label>
@@ -504,7 +641,7 @@ const AdminDashboard = () => {
           </div>
         </div>
       )}
-      {/* SECCIÓN DE CANCELACIONES DEL DÍA */}
+      
       {cancelledBookings.length > 0 && (
         <div className="mt-8 border-t border-destructive/20 pt-6">
             <h3 className="font-bold text-destructive flex items-center gap-2 mb-4">

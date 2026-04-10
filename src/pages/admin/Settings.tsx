@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { useFacility, useUpdateFacility, useFacilitySchedules, useUpsertFacilitySchedule, useUploadFacilityImage, type Facility } from "@/hooks/use-supabase-data";
-import { Clock, MapPin, Phone, Save, Mail, MessageCircle, Link2, Copy, Check, Image as ImageIcon, Instagram, Map, Info, Star, Upload, Plus, Percent, ShieldCheck, Banknote, Timer } from "lucide-react";
+import { Clock, MapPin, Phone, Save, Mail, MessageCircle, Link2, Copy, Check, Image as ImageIcon, Instagram, Map, Info, Star, Upload, Plus, Percent, ShieldCheck, Banknote, Timer, PartyPopper } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
@@ -15,6 +15,11 @@ type ExtendedFacility = Facility & {
   deposit_percentage?: number;
   mp_connected?: boolean; // Bandera para saber si ya vinculó MP
   cancellation_window_hours?: number;
+  // --- NUEVOS CAMPOS DE EVENTOS GLOBALES ---
+  has_events?: boolean;
+  default_event_duration?: number;
+  default_event_includes?: string;
+  default_event_price?: number;
 };
 
 const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
@@ -45,11 +50,17 @@ const AdminSettings = () => {
       requires_deposit: false,
       deposit_percentage: 50,
       mp_connected: false,
-      cancellation_window_hours: 12
+      cancellation_window_hours: 12,
+      // --- ESTADO INICIAL DE EVENTOS ---
+      has_events: false,
+      default_event_duration: 180,
+      default_event_includes: "",
+      default_event_price: 0,
   });
   
   const [localSchedules, setLocalSchedules] = useState<{ day_of_week: number; is_open: boolean; open_time: string; close_time: string }[]>([]);
   const [customAmenity, setCustomAmenity] = useState("");
+  const [customEventAmenity, setCustomEventAmenity] = useState(""); // <-- NUEVO ESTADO
 
   const logoInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
@@ -117,7 +128,12 @@ const AdminSettings = () => {
         requires_deposit: facility.requires_deposit || false,
         deposit_percentage: facility.deposit_percentage || 50,
         mp_connected: facility.mp_connected || false,
-        cancellation_window_hours: facility.cancellation_window_hours ?? 12
+        cancellation_window_hours: facility.cancellation_window_hours ?? 12,
+        // --- CARGAMOS EVENTOS DESDE DB ---
+        has_events: facility.has_events || false,
+        default_event_duration: facility.default_event_duration || 180,
+        default_event_includes: facility.default_event_includes || "",
+        default_event_price: facility.default_event_price || 0,
       });
     }
   }, [facility]);
@@ -181,6 +197,31 @@ const AdminSettings = () => {
           setFacilityForm(prev => ({ ...prev, amenities: [...prev.amenities, trimmed] }));
       }
       setCustomAmenity(""); 
+
+  };
+  // --- NUEVA LÓGICA PARA EVENTOS ---
+  // Transformamos el string separado por comas en un array real
+  const eventAmenities = facilityForm.default_event_includes ? facilityForm.default_event_includes.split(',').map(a => a.trim()).filter(Boolean) : [];
+  
+  // Juntamos las comodidades del predio con las del evento para mostrar todas las opciones
+  const allEventOptions = Array.from(new Set([...facilityForm.amenities, ...eventAmenities]));
+
+  const toggleEventAmenity = (amenity: string) => {
+      const updated = eventAmenities.includes(amenity)
+          ? eventAmenities.filter(a => a !== amenity)
+          : [...eventAmenities, amenity];
+      setFacilityForm(prev => ({ ...prev, default_event_includes: updated.join(', ') }));
+  };
+
+  const handleAddCustomEventAmenity = (e: React.FormEvent) => {
+      e.preventDefault();
+      const trimmed = customEventAmenity.trim();
+      if (!trimmed) return;
+      if (!eventAmenities.includes(trimmed)) {
+          const updated = [...eventAmenities, trimmed];
+          setFacilityForm(prev => ({ ...prev, default_event_includes: updated.join(', ') }));
+      }
+      setCustomEventAmenity("");
   };
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>, type: 'logo' | 'cover') => {
@@ -235,7 +276,7 @@ const AdminSettings = () => {
             </div>
             )}
 
-            {/* SECCIÓN MERCADO PAGO CONNECT (NUEVA) */}
+            {/* SECCIÓN MERCADO PAGO CONNECT */}
             <div className="glass-card rounded-2xl p-6 border border-[#009EE3]/30 bg-gradient-to-r from-[#009EE3]/5 to-transparent relative overflow-hidden">
                 <div className="absolute -right-10 -top-10 w-40 h-40 bg-[#009EE3]/10 rounded-full blur-2xl pointer-events-none" />
                 <h3 className="font-bold mb-1 flex items-center gap-2 text-[#009EE3]"><Banknote className="w-5 h-5" /> Integración de Cobros</h3>
@@ -266,7 +307,6 @@ const AdminSettings = () => {
                                     setFacilityForm(prev => ({
                                         ...prev, 
                                         mp_connected: false,
-                                        // También limpiamos el estado local para que la UI se entere
                                     }));
                                     
                                     toast({ title: "Cuenta desvinculada y datos borrados ✅" });
@@ -280,7 +320,6 @@ const AdminSettings = () => {
                         </button>
                     </div>
                 ) : (
-                    // CAMBIO CLAVE: Usamos un <a> real en lugar de un <button> para que iOS/Android abran la App de MP
                     <a 
                         href={APP_ID ? authUrl : "#"}
                         onClick={(e) => {
@@ -403,6 +442,88 @@ const AdminSettings = () => {
                     </button>
                 </form>
             </div>
+
+            {/* --- SECCIÓN NUEVA: ALQUILER PARA EVENTOS --- */}
+            <div className={cn("glass-card rounded-2xl p-6 relative border-t-4 shadow-lg transition-all", facilityForm.has_events ? "border-t-primary bg-primary/5" : "border-t-transparent")}>
+                <h3 className="font-bold mb-1 flex items-center gap-2">
+                    <PartyPopper className={cn("w-5 h-5", facilityForm.has_events ? "text-primary" : "text-muted-foreground")} /> 
+                    Alquiler para Eventos
+                </h3>
+                <p className="text-xs text-muted-foreground mb-5">Habilitá una sección especial en tu sitio para que los clientes puedan reservar tu predio para cumpleaños.</p>
+
+                <div className="bg-card border border-border rounded-xl p-4 space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="font-bold text-sm">Ofrecer servicio de eventos</p>
+                            <p className="text-[10px] text-muted-foreground">Mostrará una sección "Eventos" en tu página pública.</p>
+                        </div>
+                        <button onClick={() => setFacilityForm(prev => ({
+                                ...prev, 
+                                has_events: !prev.has_events,
+                                // HERENCIA AUTOMÁTICA: Si lo activa y está vacío, hereda todos los servicios del predio
+                                default_event_includes: (!prev.has_events && !prev.default_event_includes) ? prev.amenities.join(', ') : prev.default_event_includes
+                            }))}
+                            className={cn("w-12 h-6 rounded-full transition-colors relative shrink-0 border-2 border-transparent", facilityForm.has_events ? "bg-primary" : "bg-muted-foreground/30")}>
+                            <div className={cn("absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform", facilityForm.has_events ? "left-[24px]" : "left-0.5")} />
+                        </button>
+                    </div>
+
+                    {facilityForm.has_events && (
+                        <div className="pt-4 border-t border-border/50 animate-in fade-in slide-in-from-top-2 duration-300 space-y-5">
+                            <div>
+                                <label className="text-xs font-bold text-muted-foreground mb-2 flex items-center gap-1"><Timer className="w-3 h-3"/> Duración por defecto (Mínimo)</label>
+                                <Select value={facilityForm.default_event_duration.toString()} onValueChange={(val) => setFacilityForm(prev => ({...prev, default_event_duration: Number(val)}))}>
+                                    <SelectTrigger className="w-full h-12 border-2 border-primary/20 rounded-xl px-4 text-sm font-bold bg-background text-primary">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="120" className="font-bold text-xs">2 horas</SelectItem>
+                                        <SelectItem value="180" className="font-bold text-xs">3 horas</SelectItem>
+                                        <SelectItem value="240" className="font-bold text-xs">4 horas</SelectItem>
+                                        <SelectItem value="300" className="font-bold text-xs">5 horas</SelectItem>
+                                        <SelectItem value="360" className="font-bold text-xs">6 horas</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-muted-foreground mb-2 flex items-center gap-1"><Banknote className="w-3 h-3"/> Precio x hora por defecto ($)</label>
+                                <input 
+                                    type="number" 
+                                    value={facilityForm.default_event_price} 
+                                    onChange={(e) => setFacilityForm({ ...facilityForm, default_event_price: Number(e.target.value) })} 
+                                    className="w-full h-12 px-4 rounded-xl border-2 border-primary/20 bg-background text-sm font-bold text-primary focus:border-primary outline-none" 
+                                />
+                            </div>  
+                            
+                            {/* NUEVO DISEÑO DE CHIPS PARA EVENTOS */}
+                            <div>
+                                <label className="text-xs font-bold text-muted-foreground mb-2 flex items-center gap-1"><Star className="w-3 h-3"/> ¿Qué incluyen tus eventos por defecto?</label>
+                                <div className="flex flex-wrap gap-2 mb-3">
+                                    {allEventOptions.map(amenity => {
+                                        const isSelected = eventAmenities.includes(amenity);
+                                        return (
+                                            <button key={`evt-${amenity}`} onClick={() => toggleEventAmenity(amenity)}
+                                                className={cn("px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all", 
+                                                    isSelected ? "bg-primary text-primary-foreground border-primary shadow-sm" : "bg-background/50 border-border text-muted-foreground hover:border-primary/50"
+                                                )}>
+                                                {amenity} {isSelected && "✓"}
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                                <form onSubmit={handleAddCustomEventAmenity} className="flex gap-2">
+                                    <input type="text" value={customEventAmenity} onChange={e => setCustomEventAmenity(e.target.value)} placeholder="Ej: Animador, Castillo Inflable..." className="flex-1 px-3 py-2 rounded-xl border border-input bg-background/50 text-xs focus:border-primary outline-none transition-all" />
+                                    <button type="submit" disabled={!customEventAmenity.trim()} className="bg-secondary text-secondary-foreground px-3 py-2 rounded-xl text-xs font-bold hover:opacity-90 disabled:opacity-50 flex items-center gap-1 transition-opacity">
+                                        <Plus className="w-3.5 h-3.5"/> Agregar
+                                    </button>
+                                </form>
+                                <p className="text-[9px] text-muted-foreground mt-2 text-right">Esta configuración se aplicará como base a todas las canchas de eventos.</p>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+            {/* --- FIN SECCIÓN EVENTOS --- */} 
 
             {/* HORARIOS */}
             <div className="glass-card rounded-2xl p-6 relative">
