@@ -92,7 +92,20 @@ const AdminCourts = () => {
   
   const openEdit = (type: ModalType, item: any) => { 
       setEditing(item); 
-      setForm(type === "court" ? { name: item.name, sport_id: item.sport_id, surface: item.surface || "", price_per_hour: item.price_per_hour, features: (item.features || []).join(", "), image_url: item.image_url || "" } : type === "sport" ? { name: item.name, icon: item.icon } : { name: item.name, price: item.price, icon: item.icon }); 
+      setForm(type === "court" ? { 
+          name: item.name, 
+          surface: item.surface || "", 
+          features: (item.features || []).join(", "), 
+          image_url: item.image_url || "",
+          // CORRECCIÓN: Agregamos sportsConfig para que el formulario sepa qué mostrar
+          sportsConfig: [{
+              sport_id: item.sport_id || "",
+              price_per_hour: item.price_per_hour || 0,
+              is_event: item.is_event || false,
+              duration_minutes: item.duration_minutes || 60,
+              event_includes: item.event_includes || ""
+          }]
+      } : type === "sport" ? { name: item.name, icon: item.icon } : { name: item.name, price: item.price, icon: item.icon }); 
       setModal(type); 
   };
 
@@ -140,7 +153,7 @@ const AdminCourts = () => {
               await updateCourt.mutateAsync({ 
                   id: (editing as Court).id, 
                   ...baseCourtData,
-                  sport_id: form.sportsConfig[0].sport_id,
+                  sport_id: form.sportsConfig[0].sport_id || null, // <-- Aseguramos que pase null si es evento
                   price_per_hour: Number(form.sportsConfig[0].price_per_hour),
                   is_event: form.sportsConfig[0].is_event || false,
                   duration_minutes: Number(form.sportsConfig[0].duration_minutes) || 60,
@@ -397,53 +410,102 @@ const AdminCourts = () => {
 
                   <div className="pt-2">
                       <label className="text-xs font-bold text-foreground mb-3 block border-b pb-2 border-border/50">Deportes y Precios</label>
-                      <div className="space-y-3">
-                          {form.sportsConfig?.map((config: any, index: number) => (
-                              <div key={index} className="flex gap-2 items-end bg-muted/10 p-3 rounded-xl border border-border/50">
-                                  <div className="flex-1">
-                                      <label className="text-[10px] font-medium text-muted-foreground block mb-1">Deporte</label>
-                                      <select 
-                                          className="w-full border border-border rounded-xl px-3 py-2 text-sm bg-background outline-none focus:border-primary" 
-                                          value={config.sport_id} 
-                                          onChange={(e) => {
-                                              const newConfig = [...form.sportsConfig];
-                                              newConfig[index].sport_id = e.target.value;
-                                              setForm({ ...form, sportsConfig: newConfig });
-                                          }}
-                                      >
-                                          <option value="">Seleccionar...</option>
-                                          {sports.map((s) => <option key={s.id} value={s.id}>{s.icon} {s.name}</option>)}
-                                      </select>
-                                  </div>
-                                  <div className="w-1/3">
-                                      <label className="text-[10px] font-medium text-muted-foreground block mb-1">Precio x hora ($)</label>
+                      
+                      {/* LÓGICA INTELIGENTE: Si estamos editando un evento, mostramos un form especial */}
+                      {editing && form.sportsConfig?.[0]?.is_event ? (
+                          <div className="bg-primary/5 p-4 rounded-xl border border-primary/20 space-y-3">
+                              <h4 className="font-bold text-primary text-sm flex items-center gap-1">🎉 Configuración de Evento</h4>
+                              <div className="grid grid-cols-2 gap-3">
+                                  <div>
+                                      <label className="text-[10px] font-bold text-primary block mb-1">Precio x hora ($)</label>
                                       <input 
                                           type="number" 
-                                          className="w-full border border-border rounded-xl px-3 py-2 text-sm bg-background outline-none focus:border-primary" 
-                                          value={config.price_per_hour} 
+                                          className="w-full border-2 border-primary/20 rounded-xl px-3 py-2 text-sm bg-background outline-none focus:border-primary font-semibold" 
+                                          value={form.sportsConfig[0].price_per_hour} 
                                           onChange={(e) => {
                                               const newConfig = [...form.sportsConfig];
-                                              newConfig[index].price_per_hour = e.target.value;
+                                              newConfig[0].price_per_hour = e.target.value;
                                               setForm({ ...form, sportsConfig: newConfig });
                                           }} 
                                       />
                                   </div>
-                                  
-                                  {/* Mostrar el botón de eliminar solo si hay más de 1 opción y no estamos editando */}
-                                  {form.sportsConfig.length > 1 && !editing && (
-                                      <button 
-                                          onClick={() => {
-                                              const newConfig = form.sportsConfig.filter((_:any, i:number) => i !== index);
+                                  <div>
+                                      <label className="text-[10px] font-bold text-primary block mb-1">Duración base (min)</label>
+                                      <input 
+                                          type="number" 
+                                          className="w-full border-2 border-primary/20 rounded-xl px-3 py-2 text-sm bg-background outline-none focus:border-primary font-semibold" 
+                                          value={form.sportsConfig[0].duration_minutes} 
+                                          onChange={(e) => {
+                                              const newConfig = [...form.sportsConfig];
+                                              newConfig[0].duration_minutes = e.target.value;
                                               setForm({ ...form, sportsConfig: newConfig });
-                                          }}
-                                          className="mb-0.5 p-2 bg-destructive/10 text-destructive rounded-xl hover:bg-destructive/20 transition-colors"
-                                      >
-                                          <Trash2 className="w-4 h-4" />
-                                      </button>
-                                  )}
+                                          }} 
+                                      />
+                                  </div>
                               </div>
-                          ))}
-                      </div>
+                              <div>
+                                  <label className="text-[10px] font-bold text-primary block mb-1">¿Qué incluye?</label>
+                                  <input 
+                                      type="text" 
+                                      className="w-full border-2 border-primary/20 rounded-xl px-3 py-2 text-sm bg-background outline-none focus:border-primary font-semibold" 
+                                      value={form.sportsConfig[0].event_includes} 
+                                      onChange={(e) => {
+                                          const newConfig = [...form.sportsConfig];
+                                          newConfig[0].event_includes = e.target.value;
+                                          setForm({ ...form, sportsConfig: newConfig });
+                                      }} 
+                                  />
+                              </div>
+                          </div>
+                      ) : (
+                          <div className="space-y-3">
+                              {form.sportsConfig?.map((config: any, index: number) => (
+                                  <div key={index} className="flex gap-2 items-end bg-muted/10 p-3 rounded-xl border border-border/50">
+                                      <div className="flex-1">
+                                          <label className="text-[10px] font-medium text-muted-foreground block mb-1">Deporte</label>
+                                          <select 
+                                              className="w-full border border-border rounded-xl px-3 py-2 text-sm bg-background outline-none focus:border-primary" 
+                                              value={config.sport_id} 
+                                              onChange={(e) => {
+                                                  const newConfig = [...form.sportsConfig];
+                                                  newConfig[index].sport_id = e.target.value;
+                                                  setForm({ ...form, sportsConfig: newConfig });
+                                              }}
+                                          >
+                                              <option value="">Seleccionar...</option>
+                                              {sports.map((s) => <option key={s.id} value={s.id}>{s.icon} {s.name}</option>)}
+                                          </select>
+                                      </div>
+                                      <div className="w-1/3">
+                                          <label className="text-[10px] font-medium text-muted-foreground block mb-1">Precio x hora ($)</label>
+                                          <input 
+                                              type="number" 
+                                              className="w-full border border-border rounded-xl px-3 py-2 text-sm bg-background outline-none focus:border-primary" 
+                                              value={config.price_per_hour} 
+                                              onChange={(e) => {
+                                                  const newConfig = [...form.sportsConfig];
+                                                  newConfig[index].price_per_hour = e.target.value;
+                                                  setForm({ ...form, sportsConfig: newConfig });
+                                              }} 
+                                          />
+                                      </div>
+                                      
+                                      {/* Mostrar el botón de eliminar solo si hay más de 1 opción y no estamos editando */}
+                                      {form.sportsConfig.length > 1 && !editing && (
+                                          <button 
+                                              onClick={() => {
+                                                  const newConfig = form.sportsConfig.filter((_:any, i:number) => i !== index);
+                                                  setForm({ ...form, sportsConfig: newConfig });
+                                              }}
+                                              className="mb-0.5 p-2 bg-destructive/10 text-destructive rounded-xl hover:bg-destructive/20 transition-colors"
+                                          >
+                                              <Trash2 className="w-4 h-4" />
+                                          </button>
+                                      )}
+                                  </div>
+                              ))}
+                          </div>
+                      )}
                       
                       {!editing && (
                           <button 

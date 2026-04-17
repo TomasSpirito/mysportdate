@@ -144,7 +144,7 @@ const Landing = () => {
         <div className="max-w-7xl mx-auto flex items-center justify-between h-16 sm:h-[72px] px-5 sm:px-8">
           <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
             <img src="/favicon.png" alt="Logo MySportdate" className="w-9 h-9 rounded-xl shadow-lg shadow-emerald-500/20 object-contain" />
-            <span className="font-extrabold text-lg tracking-tight text-white">MySpordate</span>
+            <span className="font-extrabold text-lg tracking-tight text-white">MySportdate</span>
           </div>
 
           <nav className="hidden xl:flex items-center gap-8 text-[13px] font-semibold text-slate-400">
@@ -249,9 +249,9 @@ const Landing = () => {
                     <div className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
                     <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
                     <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/60" />
-                    <span className="ml-3 text-[10px] text-slate-600 font-medium">admin.myspordate.com</span>
+                    <span className="ml-3 text-[10px] text-slate-600 font-medium">admin.mysportdate.com</span>
                   </div>
-                  <img src="/MySportdateImg.JPG" alt="MySpordate Dashboard" className="w-full h-full object-cover opacity-75" />
+                  <img src="/MySportdateImg.JPG" alt="MySportdate Dashboard" className="w-full h-full object-cover opacity-75" />
                 </div>
               </motion.div>
             </motion.div>
@@ -308,7 +308,7 @@ const Landing = () => {
               {/* Paz */}
               <RevealSection className="space-y-5 xl:pl-10 xl:pt-16">
                 <div className="text-center xl:text-left mb-10">
-                  <h3 className="text-xl sm:text-2xl font-black text-emerald-400 flex items-center gap-2 justify-center xl:justify-start mb-2"><CheckCircle2 className="w-6 h-6" /> La paz de MySpordate</h3>
+                  <h3 className="text-xl sm:text-2xl font-black text-emerald-400 flex items-center gap-2 justify-center xl:justify-start mb-2"><CheckCircle2 className="w-6 h-6" /> La paz de MySportdate</h3>
                   <p className="text-slate-600 font-semibold text-sm">Soluciones que te dan libertad</p>
                 </div>
                 {[
@@ -534,7 +534,7 @@ const Landing = () => {
           </RevealSection>
 
           <RevealSection className="space-y-3">
-            <FaqItem q="¿Tengo que instalar algo en mi PC?" a="¡Para nada! MySpordate funciona 100% en la nube. Entrás desde cualquier navegador en tu PC o celular. No necesitás descargar nada." />
+            <FaqItem q="¿Tengo que instalar algo en mi PC?" a="¡Para nada! MySportdate funciona 100% en la nube. Entrás desde cualquier navegador en tu PC o celular. No necesitás descargar nada." />
             <FaqItem q="¿Qué pasa si ya tengo reservas anotadas?" a="Podés pasarlas fácilmente usando el módulo de carga manual o los Turnos Fijos. No perdés nada de tu historial." />
             <FaqItem q="¿Cobran comisión por reserva?" a="No. Solo pagás el costo fijo mensual de $15.000. Las señas que cobres van directo a tu cuenta de Mercado Pago, sin intermediarios." />
             <FaqItem q="¿Puedo gestionar más de un deporte?" a="¡Sí! Podés configurar fútbol, pádel, tenis, básquet o lo que necesites. Cada cancha se asocia al deporte correspondiente." />
@@ -602,11 +602,11 @@ const Landing = () => {
         <div className="max-w-7xl mx-auto px-5 sm:px-8 flex flex-col sm:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
             <img src="/favicon.png" alt="Logo MySportdate" className="w-9 h-9 rounded-xl shadow-lg shadow-emerald-500/20 object-contain" />
-            <span className="font-extrabold text-base text-white">MySpordate</span>
+            <span className="font-extrabold text-base text-white">MySportdate</span>
           </div>
           <div className="flex gap-6 text-xs font-semibold text-slate-600">
-            <span>© {new Date().getFullYear()} MySpordate</span>
-            <a href="mailto:contacto@myspordate.com" className="hover:text-emerald-400 transition-colors">contacto@myspordate.com</a>
+            <span>© {new Date().getFullYear()} MySportdate</span>
+            <a href="mailto:contacto@mysportdate.com" className="hover:text-emerald-400 transition-colors">contacto@mysportdate.com</a>
           </div>
         </div>
       </footer>

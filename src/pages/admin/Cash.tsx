@@ -1,8 +1,9 @@
 import { useState, useMemo } from "react";
 import AdminLayout from "@/components/layout/AdminLayout";
-import { useBookings, useCourts, useUpdateBooking, useExpenses, useBuffetSales } from "@/hooks/use-supabase-data";
+// IMPORTAMOS LOS HOOKS DE 'RANGE' PARA TRAER EL MES COMPLETO
+import { useBookingsRange, useCourts, useUpdateBooking, useExpensesRange, useBuffetSalesRange } from "@/hooks/use-supabase-data";
 import { cn } from "@/lib/utils";
-import { format, addDays, addMonths } from "date-fns";
+import { format, addDays, addMonths, startOfMonth, endOfMonth } from "date-fns";
 import { es } from "date-fns/locale";
 import { DollarSign, TrendingUp, CreditCard, AlertCircle, ChevronLeft, ChevronRight, Calendar, TrendingDown, Coffee, Download, Clock, CalendarCheck, Banknote, SmartphoneNfc, X } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
@@ -30,36 +31,54 @@ const AdminCash = () => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<"day" | "month">("day");
 
-  // ESTADO PARA EL MODAL DE COBRO DE PENDIENTES
   const [collectModal, setCollectModal] = useState<{ id: string, amount: number, userName: string, method: string } | null>(null);
 
   const dateStr = format(selectedDate, "yyyy-MM-dd");
-  const monthStr = format(selectedDate, "yyyy-MM");
-
-  const queryDate = viewMode === "day" ? dateStr : undefined;
   
-  const { data: rawBookings = [] } = useBookings(queryDate);
-  const { data: rawExpenses = [] } = useExpenses(queryDate);
-  const { data: rawBuffetSales = [] } = useBuffetSales(queryDate);
+  // CALCULAMOS EL INICIO Y FIN DE MES PARA TRAER TODO EL PAQUETE DE UNA VEZ
+  const monthStartStr = format(startOfMonth(selectedDate), "yyyy-MM-dd");
+  const monthEndStr = format(endOfMonth(selectedDate), "yyyy-MM-dd");
+  
+  // TRAEMOS TODA LA DATA DEL MES (Ignoramos el timezone gap del día a día de la BD)
+  const { data: rawBookings = [] } = useBookingsRange(monthStartStr, monthEndStr);
+  const { data: rawExpenses = [] } = useExpensesRange(monthStartStr, monthEndStr);
+  const { data: rawBuffetSales = [] } = useBuffetSalesRange(monthStartStr, monthEndStr);
+  
   const { data: courts = [] } = useCourts();
   const updateBooking = useUpdateBooking();
 
   const getCourtName = (id: string) => courts.find((c) => c.id === id)?.name || "";
 
+  // FILTRAMOS 100% EN JAVASCRIPT USANDO LA HORA LOCAL DE LA COMPUTADORA
   const bookings = useMemo(() => {
-      const filtered = viewMode === "day" ? rawBookings : rawBookings.filter(b => b.start_time.startsWith(monthStr));
+      const filtered = viewMode === "day" 
+        ? rawBookings.filter(b => format(new Date(b.start_time), "yyyy-MM-dd") === dateStr)
+        : rawBookings;
       return filtered.sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
-  }, [rawBookings, viewMode, monthStr]);
+  }, [rawBookings, viewMode, dateStr]);
 
   const expenses = useMemo(() => {
-      const filtered = viewMode === "day" ? rawExpenses : rawExpenses.filter(e => e.expense_date.startsWith(monthStr));
-      return filtered.sort((a, b) => new Date(b.expense_date).getTime() - new Date(a.expense_date).getTime());
-  }, [rawExpenses, viewMode, monthStr]);
+      const filtered = viewMode === "day" 
+        ? rawExpenses.filter(e => {
+            // Forzamos un T12:00:00 para evitar que una fecha simple '2026-04-16' baje al día 15 por GMT-3
+            const dateString = e.expense_date.includes("T") ? e.expense_date : `${e.expense_date}T12:00:00`;
+            return format(new Date(dateString), "yyyy-MM-dd") === dateStr;
+          })
+        : rawExpenses;
+        
+      return filtered.sort((a, b) => {
+          const dateA = a.expense_date.includes("T") ? a.expense_date : `${a.expense_date}T12:00:00`;
+          const dateB = b.expense_date.includes("T") ? b.expense_date : `${b.expense_date}T12:00:00`;
+          return new Date(dateB).getTime() - new Date(dateA).getTime();
+      });
+  }, [rawExpenses, viewMode, dateStr]);
 
   const buffetSales = useMemo(() => {
-      const filtered = viewMode === "day" ? rawBuffetSales : rawBuffetSales.filter(s => s.created_at.startsWith(monthStr));
+      const filtered = viewMode === "day" 
+        ? rawBuffetSales.filter(s => format(new Date(s.created_at), "yyyy-MM-dd") === dateStr)
+        : rawBuffetSales;
       return filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  }, [rawBuffetSales, viewMode, monthStr]);
+  }, [rawBuffetSales, viewMode, dateStr]);
 
   const stats = useMemo(() => {
     const totalRevenue = bookings.reduce((s, b) => s + b.total_price, 0);
@@ -73,14 +92,12 @@ const AdminCash = () => {
 
   const pendingBookings = bookings.filter((b) => b.payment_status === "partial" || b.payment_status === "none");
 
-  // NUEVA FUNCIÓN DE COBRO (Se ejecuta desde el modal)
   const confirmCollect = async () => {
     if (!collectModal) return;
     try {
         await updateBooking.mutateAsync({ 
             id: collectModal.id, 
             payment_status: "full", 
-            // Sumamos el pago actual al depósito anterior por si era un pago parcial
             deposit_amount: bookings.find(b => b.id === collectModal.id)?.total_price || collectModal.amount,
             payment_method: collectModal.method 
         } as any);
@@ -136,7 +153,7 @@ const AdminCash = () => {
             Precio_Total: b.total_price,
             Dinero_Cobrado: b.deposit_amount,
             Deuda_Pendiente: b.total_price - b.deposit_amount,
-            Metodo_Pago: b.payment_method || "No especificado" // NUEVO DATO
+            Metodo_Pago: b.payment_method || "No especificado"
         }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(canchasData), "Detalle Canchas");
     }
@@ -147,18 +164,18 @@ const AdminCash = () => {
             Hora: format(new Date(s.created_at), "HH:mm"),
             Detalle: "Ticket de venta - Buffet",
             Total_Cobrado: s.total,
-            Metodo_Pago: (s as any).payment_method || "No especificado" // NUEVO DATO
+            Metodo_Pago: (s as any).payment_method || "No especificado"
         }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(buffetData), "Ventas Buffet");
     }
 
     if (expenses.length > 0) {
         const gastosData = expenses.map(e => ({
-            Fecha: format(new Date(e.expense_date + "T12:00:00"), "dd/MM/yyyy"),
+            Fecha: format(new Date(e.expense_date.includes("T") ? e.expense_date : `${e.expense_date}T12:00:00`), "dd/MM/yyyy"),
             Categoría: EXPENSE_CATEGORIES[e.category]?.label || e.category,
             Descripción: e.description || "-",
             Monto_Gastado: e.amount,
-            Metodo_Pago: (e as any).payment_method || "No especificado" // NUEVO DATO
+            Metodo_Pago: (e as any).payment_method || "No especificado" 
         }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(gastosData), "Egresos y Compras");
     }
@@ -332,7 +349,9 @@ const AdminCash = () => {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-sm truncate">{cat.label}</p>
-                  <p className="text-xs text-muted-foreground truncate">{format(new Date(e.expense_date + "T12:00:00"), "d MMM", { locale: es })} • {e.description || "Sin descripción"}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {format(new Date(e.expense_date.includes("T") ? e.expense_date : `${e.expense_date}T12:00:00`), "d MMM", { locale: es })} • {e.description || "Sin descripción"}
+                  </p>
                 </div>
                 <div className="text-right shrink-0 flex flex-col items-end">
                     <p className="font-black text-destructive text-base">-${e.amount.toLocaleString()}</p>
