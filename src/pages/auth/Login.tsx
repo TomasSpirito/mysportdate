@@ -128,7 +128,11 @@ const Login = () => {
     <div className="min-h-screen bg-secondary flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground font-extrabold text-2xl mx-auto mb-4">S</div>
+          <img 
+            src="/favicon.png" 
+            alt="Logo MySportdate" 
+            className="w-14 h-14 rounded-xl shadow-lg shadow-emerald-500/20 object-contain mx-auto mb-4" 
+          />
           <h1 className="text-2xl font-extrabold text-secondary-foreground">MySportdate</h1>
           <p className="text-sm text-sidebar-foreground opacity-60 mt-1">
             {isForgotPassword 

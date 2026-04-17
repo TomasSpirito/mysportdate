@@ -27,6 +27,8 @@ type ExtendedFacility = Facility & {
   holiday_close_time?: string;
   event_open_time?: string;
   event_close_time?: string;
+  require_email_manual?: boolean;
+  require_phone_manual?: boolean;
 };
 
 const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
@@ -66,6 +68,8 @@ const AdminSettings = () => {
       holiday_close_time: "23:00",
       event_open_time: "12:00",
       event_close_time: "23:00",
+      require_email_manual: false,
+      require_phone_manual: false,
   });
   
   const [localSchedules, setLocalSchedules] = useState<{ day_of_week: number; is_open: boolean; open_time: string; close_time: string }[]>([]);
@@ -194,6 +198,8 @@ const AdminSettings = () => {
         holiday_close_time: facility.holiday_close_time || "23:00",
         event_open_time: facility.event_open_time?.slice(0,5) || "12:00",
         event_close_time: facility.event_close_time?.slice(0,5) || "23:00",
+        require_email_manual: facility.require_email_manual || false, 
+        require_phone_manual: facility.require_phone_manual || false,
       });
     }
   }, [facility]);
@@ -738,6 +744,7 @@ const AdminSettings = () => {
                 </div>
             </div>
 
+            {/* --- SECCIÓN: POLITICA DE RESERVAS --- */}
             <div className="glass-card rounded-2xl p-6 relative border-t-4 border-t-primary shadow-lg bg-primary/5">
                 <h3 className="font-bold mb-1 flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-primary" /> Política de Reservas</h3>
                 <p className="text-xs text-muted-foreground mb-5">Protegé tus horarios exigiendo una seña online obligatoria y definiendo el tiempo de cancelación.</p>
@@ -773,6 +780,7 @@ const AdminSettings = () => {
                         </div>
                     )}
                 </div>
+
                 {/* CONFIGURACIÓN DE CANCELACIONES */}
                 <div className="bg-card border border-border rounded-xl p-4 mt-4">
                     <div className="mb-4">
@@ -796,6 +804,43 @@ const AdminSettings = () => {
                                 <SelectItem value="0" className="font-bold text-xs">No permitir cancelar (0 horas)</SelectItem>
                             </SelectContent>
                         </Select>
+                    </div>
+                </div>
+                {/* --- NUEVO: CONFIGURACIÓN DE CAMPOS OBLIGATORIOS (RESERVAS MANUALES) --- */}
+                <div className="bg-card border border-border rounded-xl p-4 mt-4 space-y-4">
+                    <div>
+                        <p className="font-bold text-sm">Campos Obligatorios (Mostrador)</p>
+                        <p className="text-[10px] text-muted-foreground">Elegí qué datos son obligatorios cuando vos (como Admin) creás una reserva manualmente.</p>
+                    </div>
+
+                    <div className="flex flex-col gap-3 pt-2">
+                        {/* Interruptor para Email */}
+                        <div className="flex items-center justify-between bg-muted/20 p-3 rounded-lg border border-border/50">
+                            <div className="flex items-center gap-2">
+                                <Mail className="w-4 h-4 text-muted-foreground" />
+                                <div>
+                                    <p className="font-semibold text-xs text-foreground">Exigir Email</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setFacilityForm(prev => ({...prev, require_email_manual: !prev.require_email_manual}))}
+                                className={cn("w-10 h-5 rounded-full transition-colors relative shrink-0 border-2 border-transparent", facilityForm.require_email_manual ? "bg-primary" : "bg-muted-foreground/30")}>
+                                <div className={cn("absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform", facilityForm.require_email_manual ? "left-[18px]" : "left-0.5")} />
+                            </button>
+                        </div>
+
+                        {/* Interruptor para Teléfono */}
+                        <div className="flex items-center justify-between bg-muted/20 p-3 rounded-lg border border-border/50">
+                            <div className="flex items-center gap-2">
+                                <Phone className="w-4 h-4 text-muted-foreground" />
+                                <div>
+                                    <p className="font-semibold text-xs text-foreground">Exigir Teléfono</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setFacilityForm(prev => ({...prev, require_phone_manual: !prev.require_phone_manual}))}
+                                className={cn("w-10 h-5 rounded-full transition-colors relative shrink-0 border-2 border-transparent", facilityForm.require_phone_manual ? "bg-primary" : "bg-muted-foreground/30")}>
+                                <div className={cn("absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform", facilityForm.require_phone_manual ? "left-[18px]" : "left-0.5")} />
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

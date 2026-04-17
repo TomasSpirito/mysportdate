@@ -12,7 +12,8 @@ export interface FacilitySchedule { id: string; facility_id: string; day_of_week
 export interface BuffetProduct { id: string; facility_id: string; name: string; category: string; price: number; stock: number; image: string | null; image_url?: string; created_at: string; }
 export interface BuffetSale { id: string; facility_id: string; total: number; created_at: string; }
 export interface BuffetSaleItem { id: string; sale_id: string; product_id: string | null; product_name: string; quantity: number; unit_price: number; }
-export interface Facility { id: string; name: string; slug?: string | null; location: string | null; open_time: string; close_time: string; owner_id: string | null; phone: string | null; email: string | null; whatsapp: string | null;description?: string | null; maps_url?: string | null; instagram_url?: string | null; logo_url?: string | null; cover_url?: string | null; amenities?: string[]; cancellation_window_hours?: number; default_event_duration?: number; default_event_includes?: string;  }
+export interface Facility { id: string; name: string; slug?: string | null; location: string | null; open_time: string; close_time: string; owner_id: string | null; phone: string | null; email: string | null; whatsapp: string | null;description?: string | null; maps_url?: string | null; instagram_url?: string | null; logo_url?: string | null; cover_url?: string | null; amenities?: string[]; cancellation_window_hours?: number; default_event_duration?: number; default_event_includes?: string; require_email_manual?: boolean; require_phone_manual?: boolean;  }
+
 // ── Queries ──
 
 export function useFacility() {
@@ -91,10 +92,14 @@ export function useBookings(date?: string) {
       const courtIds = fCourts?.map(c => c.id) || [];
       if (courtIds.length === 0) return [];
       
-      // ESTA LÍNEA ES LA CLAVE: Ignora las canceladas
       let q = supabase.from("bookings").select("*").in("court_id", courtIds).neq("status", "cancelled");
       
-      if (date) { q = q.gte("start_time", `${date}T00:00:00`).lt("start_time", `${date}T23:59:59`); }
+      if (date) { 
+        // TRADUCCIÓN UTC
+        const startOfDay = new Date(`${date}T00:00:00`).toISOString();
+        const endOfDay = new Date(`${date}T23:59:59.999`).toISOString();
+        q = q.gte("start_time", startOfDay).lte("start_time", endOfDay);
+      }
       const { data, error } = await q;
       if (error) throw error;
       return data as Booking[];
@@ -103,7 +108,6 @@ export function useBookings(date?: string) {
   });
 }
 
-// NUEVA FUNCIÓN: Solo trae las canceladas para el registro del admin
 export function useCancelledBookings(date?: string) {
   const facilityId = useFacilityId();
   return useQuery({
@@ -114,10 +118,14 @@ export function useCancelledBookings(date?: string) {
       const courtIds = fCourts?.map(c => c.id) || [];
       if (courtIds.length === 0) return [];
       
-      // SOLO TRAE LAS CANCELADAS
       let q = supabase.from("bookings").select("*").in("court_id", courtIds).eq("status", "cancelled");
       
-      if (date) { q = q.gte("start_time", `${date}T00:00:00`).lt("start_time", `${date}T23:59:59`); }
+      if (date) { 
+        // TRADUCCIÓN UTC
+        const startOfDay = new Date(`${date}T00:00:00`).toISOString();
+        const endOfDay = new Date(`${date}T23:59:59.999`).toISOString();
+        q = q.gte("start_time", startOfDay).lte("start_time", endOfDay);
+      }
       const { data, error } = await q;
       if (error) throw error;
       return data as Booking[];
@@ -135,9 +143,14 @@ export function useBookingsRange(startDate?: string, endDate?: string) {
       const { data: fCourts } = await supabase.from("courts").select("id").eq("facility_id", facilityId);
       const courtIds = fCourts?.map(c => c.id) || [];
       if (courtIds.length === 0) return [];
+
+      // TRADUCCIÓN UTC
+      const startOfRange = new Date(`${startDate}T00:00:00`).toISOString();
+      const endOfRange = new Date(`${endDate}T23:59:59.999`).toISOString();
+
       const { data, error } = await supabase.from("bookings").select("*")
         .in("court_id", courtIds)
-        .gte("start_time", `${startDate}T00:00:00`).lt("start_time", `${endDate}T23:59:59`).neq("status", "cancelled");
+        .gte("start_time", startOfRange).lte("start_time", endOfRange).neq("status", "cancelled");
       if (error) throw error;
       return data as Booking[];
     },
@@ -145,7 +158,6 @@ export function useBookingsRange(startDate?: string, endDate?: string) {
   });
 }
 
-// NUEVO HOOK EXCLUSIVO PARA LA PESTAÑA JUGADORES (Trae todo, incluye canceladas)
 export function useAllBookingsForPlayers(startDate: string, endDate: string) {
   const facilityId = useFacilityId();
   return useQuery({
@@ -156,13 +168,16 @@ export function useAllBookingsForPlayers(startDate: string, endDate: string) {
       const courtIds = fCourts?.map(c => c.id) || [];
       if (courtIds.length === 0) return [];
       
-      // LA CLAVE: No filtramos por status. Queremos TODAS para el CRM.
+      // TRADUCCIÓN UTC
+      const startOfRange = new Date(`${startDate}T00:00:00`).toISOString();
+      const endOfRange = new Date(`${endDate}T23:59:59.999`).toISOString();
+
       const { data, error } = await supabase
         .from("bookings")
         .select("*")
         .in("court_id", courtIds)
-        .gte("start_time", `${startDate}T00:00:00`)
-        .lte("start_time", `${endDate}T23:59:59`);
+        .gte("start_time", startOfRange)
+        .lte("start_time", endOfRange);
         
       if (error) throw error;
       return data as Booking[];
@@ -176,8 +191,13 @@ export function useBookingsByCourt(courtId?: string, date?: string) {
     queryKey: ["bookings", courtId, date],
     queryFn: async () => {
       if (!courtId || !date) return [];
+      
+      // TRADUCCIÓN UTC
+      const startOfDay = new Date(`${date}T00:00:00`).toISOString();
+      const endOfDay = new Date(`${date}T23:59:59.999`).toISOString();
+
       const { data, error } = await supabase.from("bookings").select("*").eq("court_id", courtId)
-        .gte("start_time", `${date}T00:00:00`).lt("start_time", `${date}T23:59:59`).neq("status", "cancelled");
+        .gte("start_time", startOfDay).lte("start_time", endOfDay).neq("status", "cancelled");
       if (error) throw error;
       return data as Booking[];
     },
@@ -186,14 +206,11 @@ export function useBookingsByCourt(courtId?: string, date?: string) {
 }
 
 export function generateAvailableSlots(bookings: Booking[], date: string, openHour = 8, closeHour = 23) {
-  // Usamos getHours() para obtener la hora local exacta
   const occupiedHours = new Set(bookings.map((b) => new Date(b.start_time).getHours()));
-  
   const slots: { time: string; available: boolean }[] = [];
   
   for (let h = openHour; h < closeHour; h++) {
     const displayH = h % 24; 
-    
     slots.push({ 
       time: `${displayH.toString().padStart(2, "0")}:00`, 
       available: !occupiedHours.has(displayH) 
@@ -202,7 +219,6 @@ export function generateAvailableSlots(bookings: Booking[], date: string, openHo
   return slots;
 }
 
-// Fetch schedules by facility_id (for player-side, without FacilityContext)
 export function useFacilitySchedulesByFacilityId(facilityId?: string) {
   return useQuery({
     queryKey: ["facility-schedules-public", facilityId],
@@ -224,13 +240,13 @@ export function useCreateBooking() {
     mutationFn: async (params: {
       court_id: string; date: string; time: string; user_name: string; user_email: string; user_phone: string;
       total_price: number; deposit_amount: number; payment_status: string; booking_type?: string; addon_ids?: string[];
-      end_time?: string; // <-- NUEVO: Le avisamos que ahora puede recibir la hora de fin
+      start_time?: string; // <-- NUEVO: Para recibir la hora exacta UTC si el front la manda
+      end_time?: string; 
     }) => {
-      // Mantenemos el start_time con tu zona horaria
-      const start_time = `${params.date}T${params.time}:00-03:00`;
       
-      // NUEVO: Si el formulario nos manda el end_time real, lo usamos. 
-      // Si no (por ejemplo, desde otra parte de la app), le sumamos 1 hora por defecto para que no se rompa.
+      // Si nos mandan start_time (como el dashboard nuevo), lo usamos. Si no, fallback al viejo sistema.
+      const final_start_time = params.start_time || `${params.date}T${params.time}:00-03:00`;
+      
       let final_end_time;
       if (params.end_time) {
           final_end_time = params.end_time;
@@ -241,8 +257,8 @@ export function useCreateBooking() {
 
       const { data, error } = await supabase.rpc("create_booking" as any, {
         p_court_id: params.court_id, 
-        p_start_time: start_time, 
-        p_end_time: final_end_time, // <-- Pasamos el end_time correcto a Supabase
+        p_start_time: final_start_time, 
+        p_end_time: final_end_time, 
         p_user_name: params.user_name, 
         p_user_email: params.user_email, 
         p_user_phone: params.user_phone,
@@ -325,21 +341,16 @@ export function useUploadCourtImage() {
     setUploadingImage(true);
     
     try {
-      const fileName = `${facilityId}/${Date.now()}_${file.name}`;
+      const cleanFileName = file.name.replace(/[^a-zA-Z0-9.]/g, ''); 
+      const fileName = `${facilityId}/${Date.now()}_${cleanFileName}`;
 
       const { data, error } = await supabase.storage
-        .from('courts') // Apuntamos al nuevo bucket
-        .upload(fileName, file, {
-          cacheControl: '3600',
-          upsert: true,
-        });
+        .from('courts')
+        .upload(fileName, file, { cacheControl: '3600', upsert: true });
 
       if (error) throw error;
 
-      const { data: publicUrlData } = supabase.storage
-        .from('courts')
-        .getPublicUrl(fileName);
-
+      const { data: publicUrlData } = supabase.storage.from('courts').getPublicUrl(fileName);
       return publicUrlData.publicUrl;
     } catch (error) {
       console.error("Error subiendo imagen de cancha:", error);
@@ -362,9 +373,12 @@ export function useUploadFacilityImage() {
     setUploadingImage(true);
     
     try {
-      const fileName = `${facilityId}/${type}_${Date.now()}_${file.name}`;
+      const cleanFileName = file.name.replace(/[^a-zA-Z0-9.]/g, ''); 
+      const fileName = `${facilityId}/${type}_${Date.now()}_${cleanFileName}`;
+      
       const { error } = await supabase.storage.from('facilities').upload(fileName, file, { cacheControl: '3600', upsert: true });
       if (error) throw error;
+      
       const { data: publicUrlData } = supabase.storage.from('facilities').getPublicUrl(fileName);
       return publicUrlData.publicUrl;
     } catch (error) {
@@ -443,7 +457,7 @@ export function useExpensesRange(startDate?: string, endDate?: string) {
     enabled: !!startDate && !!endDate && !!facilityId,
   });
 }
-// --- Expenses ---
+
 export function useCreateExpense() {
   const facilityId = useFacilityId();
   const qc = useQueryClient();
@@ -506,7 +520,6 @@ export function useUpsertFacilitySchedule() {
   return useMutation({
     mutationFn: async (schedules: { day_of_week: number; is_open: boolean; open_time: string; close_time: string }[]) => {
       if (!facilityId) throw new Error("No facility");
-      // Delete existing schedules for this facility, then insert fresh
       const { error: delError } = await supabase.from("facility_schedules").delete().eq("facility_id", facilityId);
       if (delError) throw delError;
       const rows = schedules.map((s) => ({
@@ -548,10 +561,10 @@ export function useCreateBuffetProduct() {
       const { data, error } = await supabase
         .from("buffet_products")
         .insert({ ...product, facility_id: facilityId } as any)
-        .select() // <-- PEDIMOS QUE NOS DEVUELVA EL REGISTRO
-        .single(); // <-- COMO ES UNO SOLO, USAMOS SINGLE
+        .select()
+        .single();
       if (error) throw error;
-      return data; // <-- DEVOLVEMOS LA DATA PARA USAR SU ID
+      return data;
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["buffet-products"] }); },
   });
@@ -621,11 +634,10 @@ export function useCreateBuffetSale() {
     mutationFn: async (params: { 
         total: number; 
         items: { product_id: string; product_name: string; quantity: number; unit_price: number }[];
-        payment_method: string; // <-- NUEVO: Recibimos el método de pago
+        payment_method: string;
     }) => {
       if (!facilityId) throw new Error("No facility");
       
-      // NUEVO: Pasamos el payment_method a la base de datos
       const { data: sale, error: saleError } = await supabase
         .from("buffet_sales")
         .insert({ 
@@ -642,7 +654,6 @@ export function useCreateBuffetSale() {
       const { error: itemsError } = await supabase.from("buffet_sale_items").insert(saleItems as any);
       if (itemsError) throw itemsError;
       
-      // Decrease stock for each product
       for (const item of params.items) {
         const { data: product } = await supabase.from("buffet_products").select("stock").eq("id", item.product_id).single();
         if (product) {
@@ -660,36 +671,25 @@ export function useCreateBuffetSale() {
   });
 }
 
-// --- Buffet uploads ---
-
 export function useUploadBuffetImage() {
   const facilityId = useFacilityId();
   const [uploadingImage, setUploadingImage] = useState(false);
 
-  // mutationFn simplificada para manejar la subida
   const uploadImage = async (file: File) => {
     if (!facilityId) throw new Error("No facility");
     setUploadingImage(true);
     
     try {
-      // Creamos un nombre de archivo único: facility_id / timestamp_nombreoriginal
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${facilityId}/${Date.now()}_${file.name}`;
+      const cleanFileName = file.name.replace(/[^a-zA-Z0-9.]/g, ''); 
+      const fileName = `${facilityId}/${Date.now()}_${cleanFileName}`;
 
       const { data, error } = await supabase.storage
-        .from('buffet') // El bucket que creamos en SQL
-        .upload(fileName, file, {
-          cacheControl: '3600',
-          upsert: true, // Si ya existe, lo pisa (el timestamp evita esto)
-        });
+        .from('buffet')
+        .upload(fileName, file, { cacheControl: '3600', upsert: true });
 
       if (error) throw error;
 
-      // Obtenemos la URL pública final
-      const { data: publicUrlData } = supabase.storage
-        .from('buffet')
-        .getPublicUrl(fileName);
-
+      const { data: publicUrlData } = supabase.storage.from('buffet').getPublicUrl(fileName);
       return publicUrlData.publicUrl;
     } catch (error) {
       console.error("Error subiendo imagen:", error);
@@ -701,7 +701,7 @@ export function useUploadBuffetImage() {
 
   return { uploadImage, uploadingImage };
 }
-// --- Buffet Purchases ---
+
 export function useCreateBuffetPurchase() {
   const queryClient = useQueryClient();
   const facilityId = useFacilityId();
@@ -715,7 +715,6 @@ export function useCreateBuffetPurchase() {
       return data;
     },
     onSuccess: () => {
-      // Refrescamos el buffet y los gastos para que se actualice todo mágicamente
       queryClient.invalidateQueries({ queryKey: ['buffet_products'] });
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
     }

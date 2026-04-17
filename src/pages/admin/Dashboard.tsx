@@ -188,25 +188,39 @@ const AdminDashboard = () => {
     const emailStr = manualForm.email.trim();
     const phoneStr = manualForm.phone.trim();
 
-    if (!manualSlot || !nameStr || !emailStr || !phoneStr) {
-      toast({ title: "Completá todos los campos obligatorios", variant: "destructive" });
+    // El slot y el nombre SIEMPRE son obligatorios
+    if (!manualSlot || !nameStr) {
+      toast({ title: "Atención", description: "El nombre del jugador es obligatorio.", variant: "destructive" });
       return;
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(emailStr)) {
-      toast({ title: "Email inválido", description: "Por favor ingresá un correo electrónico real.", variant: "destructive" });
+    // Validar Email solo si está configurado como obligatorio (o si el usuario escribió algo, lo validamos)
+    if (facility?.require_email_manual && !emailStr) {
+      toast({ title: "Atención", description: "El email es obligatorio según tu configuración.", variant: "destructive" });
       return;
     }
+    if (emailStr) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(emailStr)) {
+        toast({ title: "Email inválido", description: "Por favor ingresá un correo electrónico real.", variant: "destructive" });
+        return;
+      }
+    }
 
-    const phoneRegex = /^[0-9+\-\s()]{8,20}$/;
-    if (!phoneRegex.test(phoneStr)) {
-      toast({ title: "Teléfono inválido", description: "Ingresá un número válido (mínimo 8 dígitos).", variant: "destructive" });
+    // Validar Teléfono solo si está configurado como obligatorio (o si el usuario escribió algo, lo validamos)
+    if (facility?.require_phone_manual && !phoneStr) {
+      toast({ title: "Atención", description: "El teléfono es obligatorio según tu configuración.", variant: "destructive" });
       return;
+    }
+    if (phoneStr) {
+      const phoneRegex = /^[0-9+\-\s()]{8,20}$/;
+      if (!phoneRegex.test(phoneStr)) {
+        toast({ title: "Teléfono inválido", description: "Ingresá un número válido (mínimo 8 dígitos).", variant: "destructive" });
+        return;
+      }
     }
     
-   try {
-      // CORRECCIÓN 3: Sacamos el fallback erróneo al courtId
+    try {
       const finalPrice = Number(manualForm.customPrice) || 0;
       let finalDeposit = 0;
 
@@ -221,15 +235,20 @@ const AdminDashboard = () => {
       const endDateTime = new Date(startDateTime.getTime() + manualForm.duration * 60000);
       
       await createBooking.mutateAsync({
-        court_id: manualForm.selectedVirtualCourtId, // CORRECCIÓN 4: Mandamos la ID de la variante elegida
-        date: dateStr, time: manualForm.startTime,
-        user_name: nameStr, user_email: emailStr, user_phone: phoneStr,
+        court_id: manualForm.selectedVirtualCourtId, 
+        date: dateStr, 
+        time: manualForm.startTime,
+        // 👇 ESTA ES LA LÍNEA QUE FALTABA PARA QUE SE DIBUJE EN LA GRILLA 👇
+        start_time: startDateTime.toISOString(), 
+        end_time: endDateTime.toISOString(),
+        user_name: nameStr, 
+        user_email: emailStr, 
+        user_phone: phoneStr,
         total_price: finalPrice, 
         deposit_amount: finalDeposit, 
         payment_status: manualForm.paymentStatus, 
         booking_type: "manual",
-        payment_method: isPaying ? manualForm.paymentMethod : null,
-        end_time: endDateTime.toISOString()
+        payment_method: isPaying ? manualForm.paymentMethod : null
       } as any);
       
       toast({ title: "Reserva agendada exitosamente ✅" });
@@ -616,16 +635,20 @@ const AdminDashboard = () => {
 
             <div className="space-y-4">
               <div>
-                <label className="text-xs font-bold text-muted-foreground mb-1.5 block">Nombre del jugador *</label>
+                <label className="text-xs font-bold text-muted-foreground mb-1.5 block">Nombre del jugador <span className="text-destructive">*</span></label>
                 <input className="w-full border-2 border-border/50 rounded-xl px-3 py-2.5 text-sm bg-background outline-none focus:border-primary font-semibold" value={manualForm.name} onChange={(e) => setManualForm({ ...manualForm, name: e.target.value })} placeholder="Ej: Juan Pérez" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs font-bold text-muted-foreground mb-1.5 block">Teléfono *</label>
+                    <label className="text-xs font-bold text-muted-foreground mb-1.5 flex items-center gap-1">
+                        Teléfono {facility?.require_phone_manual && <span className="text-destructive">*</span>}
+                    </label>
                     <input className="w-full border-2 border-border/50 rounded-xl px-3 py-2.5 text-sm bg-background outline-none focus:border-primary" value={manualForm.phone} onChange={(e) => setManualForm({ ...manualForm, phone: e.target.value })} placeholder="1123456789" />
                   </div>
                   <div>
-                    <label className="text-xs font-bold text-muted-foreground mb-1.5 block">Email *</label>
+                    <label className="text-xs font-bold text-muted-foreground mb-1.5 flex items-center gap-1">
+                        Email {facility?.require_email_manual && <span className="text-destructive">*</span>}
+                    </label>
                     <input className="w-full border-2 border-border/50 rounded-xl px-3 py-2.5 text-sm bg-background outline-none focus:border-primary" value={manualForm.email} onChange={(e) => setManualForm({ ...manualForm, email: e.target.value })} placeholder="juan@ejemplo.com" />
                   </div>
               </div>
