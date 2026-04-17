@@ -59,6 +59,7 @@ const Buffet = () => {
   const [newPrice, setNewPrice] = useState("");
   const [newStock, setNewStock] = useState("");
   const [newImageUrl, setNewImageUrl] = useState(""); 
+  const [customImage, setCustomImage] = useState(""); // <-- NUEVO ESTADO
   const [newLowStockLimit, setNewLowStockLimit] = useState("10");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -85,14 +86,16 @@ const Buffet = () => {
     }
   }, []);
 
-  useEffect(() => {
+useEffect(() => {
     if (debouncedName && debouncedName.trim().length > 2) {
-      if (!uploadingImage && !newImageUrl.includes('supabase')) searchImages(debouncedName.trim());
+      // Siempre busca imágenes si el texto cambia
+      searchImages(debouncedName.trim());
     } else {
       setImageResults([]);
-      setNewImageUrl(""); 
+      // Si borramos el texto, deselecciona Unsplash (pero protege la tuya)
+      setNewImageUrl(prev => prev && !prev.includes('supabase') ? "" : prev);
     }
-  }, [debouncedName, searchImages, uploadingImage, newImageUrl]);
+  }, [debouncedName, searchImages]); // Solo depende del nombre
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -102,8 +105,8 @@ const Buffet = () => {
 
     try {
         const publicUrl = await uploadImage(file);
-        setNewImageUrl(publicUrl);
-        setImageResults([]);
+        setCustomImage(publicUrl); // <-- Guardamos la tuya a salvo
+        setNewImageUrl(publicUrl); // <-- Y la seleccionamos
         toast({ title: "Imagen subida ✅" });
     } catch {
         toast({ title: "Error", description: "No se pudo subir la imagen", variant: "destructive" });
@@ -151,6 +154,7 @@ const Buffet = () => {
     setNewPrice("");
     setNewStock("");
     setNewImageUrl("");
+    setCustomImage(""); // <-- AGREGAR ESTO
     setNewLowStockLimit("10");
     setImageResults([]);
   };
@@ -163,6 +167,7 @@ const Buffet = () => {
         setNewPrice(product.price.toString());
         setNewStock(product.stock.toString());
         setNewImageUrl(product.image_url || "");
+        setCustomImage(product.image_url?.includes('supabase') ? product.image_url : "");
         setNewLowStockLimit((product.low_stock_limit ?? 10).toString());
     } else {
         resetForm();
@@ -400,23 +405,44 @@ const Buffet = () => {
                           </div>
                           
                           <div className="grid grid-cols-2 gap-2 mb-1">
-                              <button onClick={() => fileInputRef.current?.click()} disabled={uploadingImage}
-                                  className={cn("aspect-square rounded-xl border-2 border-dashed border-border overflow-hidden transition-all flex flex-col items-center justify-center bg-card text-center text-xs text-muted-foreground p-3 hover:border-primary hover:bg-primary/5 group",
-                                      newImageUrl && newImageUrl.includes('supabase') && "border-primary shadow-sm border-solid"
-                                  )}>
-                                  {uploadingImage ? (<Loader2 className="w-6 h-6 animate-spin text-primary"/>) : (
-                                      <>
-                                          {newImageUrl && newImageUrl.includes('supabase') ? (
-                                              <img src={newImageUrl} alt="Propia" className="w-full h-full object-cover" loading="lazy" />
-                                          ) : (
-                                              <>
-                                                  <Upload className="w-5 h-5 mb-1.5 text-muted-foreground/60 group-hover:text-primary transition-colors"/>
-                                                  <span className="font-medium">Subir propia</span>
-                                              </>
-                                          )}
-                                      </>
-                                  )}
-                              </button>
+                              <button 
+                                onClick={(e) => {
+                                    // Si ya subiste una tuya y no está seleccionada, la selecciona.
+                                    // Si ya está seleccionada, abre el explorador para subir una nueva.
+                                    if (customImage && newImageUrl !== customImage) {
+                                        e.preventDefault();
+                                        setNewImageUrl(customImage); 
+                                    } else {
+                                        fileInputRef.current?.click();
+                                    }
+                                }} 
+                                disabled={uploadingImage}
+                                className={cn(
+                                    "aspect-square rounded-xl border-2 border-dashed border-border overflow-hidden transition-all flex flex-col items-center justify-center bg-card text-center text-xs text-muted-foreground p-3 hover:border-primary hover:bg-primary/5 group relative",
+                                    newImageUrl === customImage && customImage !== "" && "border-primary shadow-sm border-solid"
+                                )}
+                            >
+                                {uploadingImage ? (<Loader2 className="w-6 h-6 animate-spin text-primary"/>) : (
+                                    <>
+                                        {customImage ? (
+                                            <>
+                                                <img src={customImage} alt="Propia" className="w-full h-full object-cover" loading="lazy" />
+                                                {/* Mensaje al hacer hover si ya está seleccionada */}
+                                                {newImageUrl === customImage && (
+                                                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-medium">
+                                                        Cambiar
+                                                    </div>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Upload className="w-5 h-5 mb-1.5 text-muted-foreground/60 group-hover:text-primary transition-colors"/>
+                                                <span className="font-medium">Subir propia</span>
+                                            </>
+                                        )}
+                                    </>
+                                )}
+                            </button>
                               
                               {imageResults.length === 0 && !searchingImages && !newName ? (
                                   <div className="aspect-square text-center py-3 border-2 border-dashed border-border/50 rounded-xl bg-card flex flex-col items-center justify-center text-muted-foreground">
