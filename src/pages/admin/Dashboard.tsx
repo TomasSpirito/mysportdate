@@ -90,7 +90,11 @@ const AdminDashboard = () => {
   }
 
   // --- MAGIA DE AGRUPACIÓN FÍSICA ---
-  const physicalCourts = courts.reduce((acc, current) => {
+  // 1. Filtramos las "Canchas Combo" (las que bloquean a otras) para que NO tengan su propia columna
+  const baseCourts = courts.filter(c => !c.linked_court_ids || c.linked_court_ids.length === 0);
+  
+  // 2. Agrupamos solo las canchas físicas reales
+  const physicalCourts = baseCourts.reduce((acc, current) => {
       const key = current.shared_group_id || current.id;
       const existing = acc.find(c => c.key === key);
       if (existing) {
@@ -103,9 +107,18 @@ const AdminDashboard = () => {
 
   const visiblePhysicalCourts = courtFilter === "all" ? physicalCourts : physicalCourts.filter(pc => pc.key === courtFilter);
 
-  const getBookingGroup = (courtIds: string[], hour: string) => {
+  // Pasamos la columnKey (el shared_group_id de la columna que se está dibujando)
+  const getBookingGroup = (courtIds: string[], hour: string, columnKey: string) => {
     return bookings.find((b) => {
-      if (!courtIds.includes(b.court_id)) return false;
+      const bookedCourt = courts.find(c => c.id === b.court_id);
+      
+      // La reserva pertenece a esta columna SI:
+      // 1. Se hizo directamente en una de las variantes de esta cancha
+      const isDirect = courtIds.includes(b.court_id);
+      // 2. O se hizo en un "Combo" que bloquea el ID de esta columna
+      const isLinked = bookedCourt?.linked_court_ids?.includes(columnKey);
+
+      if (!isDirect && !isLinked) return false;
 
       const start = new Date(b.start_time);
       const end = b.end_time ? new Date(b.end_time) : new Date(start.getTime() + 60 * 60000);
@@ -157,7 +170,7 @@ const AdminDashboard = () => {
   const handleSlotClick = (pc: any, hour: string) => {
     setIsCancelling(false);
     const courtIds = pc.virtualCourts.map((c: Court) => c.id);
-    const booking = getBookingGroup(courtIds, hour);
+    const booking = getBookingGroup(courtIds, hour, pc.key);
     
     if (booking) {
       setSelectedBooking(booking);
@@ -234,11 +247,45 @@ const AdminDashboard = () => {
       const startDateTime = new Date(`${dateStr}T${manualForm.startTime}:00`);
       const endDateTime = new Date(startDateTime.getTime() + manualForm.duration * 60000);
       
+      // --- NUEVO: ESCUDO ANTI-CHOQUES PARA RECURSOS VINCULADOS ---
+      const selectedCourt = courts.find(c => c.id === manualForm.selectedVirtualCourtId);
+      
+      if (selectedCourt) {
+          const hasOverlap = bookings.some(b => {
+              const bookedCourt = courts.find(c => c.id === b.court_id);
+              if (!bookedCourt) return false;
+
+              // 1. Validamos relaciones físicas (Directa o por Combo)
+              const isDirectMatch = bookedCourt.shared_group_id === selectedCourt.shared_group_id;
+              const newBlocksBooked = selectedCourt.linked_court_ids?.includes(bookedCourt.shared_group_id!);
+              const bookedBlocksNew = bookedCourt.linked_court_ids?.includes(selectedCourt.shared_group_id!);
+
+              if (!isDirectMatch && !newBlocksBooked && !bookedBlocksNew) return false;
+
+              // 2. Validamos si los tiempos se pisan (usando milisegundos exactos)
+              const bStart = new Date(b.start_time).getTime();
+              const bEnd = new Date(b.end_time).getTime();
+              const eStart = startDateTime.getTime();
+              const eEnd = endDateTime.getTime();
+
+              return Math.max(bStart, eStart) < Math.min(bEnd, eEnd);
+          });
+
+          if (hasOverlap) {
+              toast({ 
+                  title: "Horario Ocupado", 
+                  description: "No se puede agendar. Hay una reserva o evento que bloquea este horario.", 
+                  variant: "destructive" 
+              });
+              return; // Frenamos la ejecución acá, no se guarda nada
+          }
+      }
+      // -------------------------------------------------------------
+
       await createBooking.mutateAsync({
         court_id: manualForm.selectedVirtualCourtId, 
         date: dateStr, 
         time: manualForm.startTime,
-        // 👇 ESTA ES LA LÍNEA QUE FALTABA PARA QUE SE DIBUJE EN LA GRILLA 👇
         start_time: startDateTime.toISOString(), 
         end_time: endDateTime.toISOString(),
         user_name: nameStr, 
@@ -343,8 +390,8 @@ const AdminDashboard = () => {
                     
                     {visiblePhysicalCourts.map((pc) => {
                       const courtIds = pc.virtualCourts.map(c => c.id);
-                      const b00 = getBookingGroup(courtIds, `${h}:00`);
-                      const b30 = getBookingGroup(courtIds, `${h}:30`);
+                      const b00 = getBookingGroup(courtIds, `${h}:00`, pc.key);
+                      const b30 = getBookingGroup(courtIds, `${h}:30`, pc.key);
 
                       const isCompletelyFree = !b00 && !b30;
                       const isSameBooking = b00 && b30 && b00.id === b30.id;
@@ -564,37 +611,53 @@ const AdminDashboard = () => {
             </div>
 
             {/* CORRECCIÓN 6: Selector inteligente (Detecta Eventos) */}
-            {manualSlot.pc.virtualCourts.length > 1 && (
-                <div className="mb-4 animate-in fade-in slide-in-from-top-2 duration-200">
-                    <label className="text-xs font-bold text-muted-foreground mb-1.5 block">Variante a reservar</label>
-                    <select 
-                        className="w-full border-2 border-primary/30 rounded-xl px-3 py-2.5 text-sm bg-primary/5 outline-none focus:border-primary font-bold text-primary cursor-pointer"
-                        value={manualForm.selectedVirtualCourtId}
-                        onChange={(e) => {
-                            const selectedCourt = manualSlot.pc.virtualCourts.find((c: Court) => c.id === e.target.value);
-                            
-                            // Si elige evento, le clavamos su duración por defecto (ej: 180 min). Si no, 60 min.
-                            const autoDuration = selectedCourt.is_event ? (selectedCourt.duration_minutes || 180) : 60;
-                            const calculatedPrice = selectedCourt.price_per_hour * (autoDuration / 60);
+            {/* LÓGICA INTELIGENTE: Calculamos qué eventos afectan a esta cancha que el admin clickeó */}
+            {(() => {
+                const applicableEvents = courts.filter(c => c.is_event && (!c.linked_court_ids?.length || c.linked_court_ids.includes(manualSlot.pc.key)));
+                const showVariantSelector = manualSlot.pc.virtualCourts.length + applicableEvents.length > 1;
 
-                            setManualForm({ 
-                                ...manualForm, 
-                                selectedVirtualCourtId: e.target.value,
-                                duration: autoDuration, // Actualizamos la duración en el formulario
-                                customPrice: calculatedPrice.toString() // Calculamos el precio total
-                            });
-                        }}
-                    >
-                        {manualSlot.pc.virtualCourts.map((c: Court) => (
-                            <option key={c.id} value={c.id}>
-                                {c.is_event 
-                                    ? `🎉 Evento / Cumpleaños - $${c.price_per_hour}/hora` 
-                                    : `${getSportName(c.sport_id) || "Cancha"} - $${c.price_per_hour}/hora`}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-            )}
+                return showVariantSelector && (
+                    <div className="mb-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                        <label className="text-xs font-bold text-muted-foreground mb-1.5 block">Variante o Paquete a reservar</label>
+                        <select 
+                            className="w-full border-2 border-primary/30 rounded-xl px-3 py-2.5 text-sm bg-primary/5 outline-none focus:border-primary font-bold text-primary cursor-pointer"
+                            value={manualForm.selectedVirtualCourtId}
+                            onChange={(e) => {
+                                const selectedId = e.target.value;
+                                const selectedCourt = manualSlot.pc.virtualCourts.find((c: Court) => c.id === selectedId) || applicableEvents.find((c: Court) => c.id === selectedId);
+                                
+                                const autoDuration = selectedCourt?.is_event ? (selectedCourt.duration_minutes || 180) : 60;
+                                const calculatedPrice = (selectedCourt?.price_per_hour || 0) * (autoDuration / 60);
+
+                                setManualForm({ 
+                                    ...manualForm, 
+                                    selectedVirtualCourtId: selectedId,
+                                    duration: autoDuration, 
+                                    customPrice: calculatedPrice.toString() 
+                                });
+                            }}
+                        >
+                            <optgroup label="Deportes Regulares">
+                                {manualSlot.pc.virtualCourts.map((c: Court) => (
+                                    <option key={c.id} value={c.id}>
+                                        {getSportName(c.sport_id) || "Cancha"} - ${c.price_per_hour}/hora
+                                    </option>
+                                ))}
+                            </optgroup>
+                            
+                            {applicableEvents.length > 0 && (
+                                <optgroup label="Paquetes de Evento">
+                                    {applicableEvents.map((c: Court) => (
+                                        <option key={c.id} value={c.id}>
+                                            🎉 {c.name} - ${c.price_per_hour}/hora base
+                                        </option>
+                                    ))}
+                                </optgroup>
+                            )}
+                        </select>
+                    </div>
+                );
+            })()}
 
             <div className="grid grid-cols-2 gap-3 mb-4">
                 <div>
@@ -619,7 +682,10 @@ const AdminDashboard = () => {
                         <option value={90}>1.5 horas</option>
                         <option value={120}>2 horas</option>
                         <option value={150}>2.5 horas</option>
-                        {facility?.has_events && <option value={180}>3 horas (Evento)</option>}
+                        <option value={180}>3 horas</option>
+                        <option value={240}>4 horas</option>
+                        <option value={300}>5 horas</option>
+                        <option value={360}>6 horas</option>
                     </select>
                 </div>
                 <div>

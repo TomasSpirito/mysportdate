@@ -60,6 +60,12 @@ const Events = () => {
 
     // 2. Lógica de Horarios EXCLUSIVA para Eventos
     const todayHoliday = holidays.find(h => h.date === dateStr);
+    
+    // Calculamos el índice del día (Lunes = 0, Domingo = 6) para leer la agenda regular
+    const jsDay = getDay(selectedDate); 
+    const dayIdx = jsDay === 0 ? 6 : jsDay - 1; 
+    const todaySchedule = schedules.find((s) => s.day_of_week === dayIdx);
+
     let isClosed = false;
     let openH = -1;
     let closeH = -1;
@@ -71,11 +77,16 @@ const Events = () => {
             closeH = parseInt(todayHoliday.custom_close_time?.split(":")[0] || "23");
         }
     } else {
-        // Usamos los horarios configurados específicamente para eventos en Settings
-        const eventOpen = facility?.event_open_time || "12:00";
-        const eventClose = facility?.event_close_time || "23:00";
-        openH = parseInt(eventOpen.split(":")[0]);
-        closeH = parseInt(eventClose.split(":")[0]);
+        // PRIMERO revisamos si el día de la semana está cerrado en la configuración general
+        isClosed = todaySchedule ? !todaySchedule.is_open : false;
+        
+        // SI ESTÁ ABIERTO, le aplicamos los horarios específicos de eventos
+        if (!isClosed) {
+            const eventOpen = facility?.event_open_time || "12:00";
+            const eventClose = facility?.event_close_time || "23:00";
+            openH = parseInt(eventOpen.split(":")[0]);
+            closeH = parseInt(eventClose.split(":")[0]);
+        }
     }
 
     if (closeH <= openH && closeH >= 0) closeH += 24;
@@ -90,15 +101,29 @@ const Events = () => {
             
             const isOverlap = bookings.some(b => {
                 const bookingCourt = courts.find(c => c.id === b.court_id);
-                if (bookingCourt?.shared_group_id !== activeCourt.shared_group_id) return false;
+                if (!bookingCourt) return false;
 
+                // 1. ¿Es exactamente la misma cancha/paquete?
+                const isDirectMatch = bookingCourt.shared_group_id === activeCourt.shared_group_id;
+                
+                // 2. ¿El paquete de evento que queremos reservar incluye la cancha que ya está ocupada?
+                const eventBlocksBookedCourt = activeCourt.linked_court_ids?.includes(bookingCourt.shared_group_id!);
+                
+                // 3. ¿La reserva existente es un evento gigante que ya bloqueó la cancha que queremos reservar?
+                const bookedCourtBlocksEvent = bookingCourt.linked_court_ids?.includes(activeCourt.shared_group_id!);
+
+                // Si no hay ninguna relación física entre las reservas, no hay choque
+                if (!isDirectMatch && !eventBlocksBookedCourt && !bookedCourtBlocksEvent) return false;
+
+                // Si comparten espacio físico, verificamos si chocan en el HORARIO:
                 const bStart = new Date(b.start_time).getHours();
                 const bEnd = new Date(b.end_time).getHours();
                 const bEndAdjusted = bEnd <= bStart ? bEnd + 24 : bEnd; 
 
                 const eStart = h;
-                const eEnd = h + selectedDuration; // Usamos la duración que eligió el cliente
+                const eEnd = h + selectedDuration; // Duración elegida por el cliente
 
+                // Lógica matemática de superposición de rangos de tiempo
                 return Math.max(bStart, eStart) < Math.min(bEndAdjusted, eEnd);
             });
 

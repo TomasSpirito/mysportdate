@@ -4,7 +4,7 @@ import { useFacilityId } from "@/contexts/FacilityContext";
 import { useState } from "react";
 
 export interface Sport { id: string; name: string; icon: string; }
-export interface Court { id: string; facility_id: string; sport_id: string; name: string; surface: string | null; price_per_hour: number; features: string[]; image: string | null; image_url?: string; shared_group_id?: string; is_event?: boolean; duration_minutes?: number; }
+export interface Court { id: string; facility_id: string; sport_id: string; name: string; surface: string | null; price_per_hour: number; features: string[]; image: string | null; image_url?: string; shared_group_id?: string; is_event?: boolean; duration_minutes?: number; linked_court_ids?: string[]; }
 export interface Addon { id: string; facility_id: string; name: string; price: number; icon: string; requires_stock: boolean; }
 export interface Booking { id: string; court_id: string; user_id: string | null; user_name: string | null; user_email?: string | null; user_phone?: string | null; start_time: string; end_time: string; total_price: number; deposit_amount: number; status: string; payment_status: string; booking_type: string; created_at: string; cancellation_token?: string; cancelled_at?: string | null; }
 export interface Expense { id: string; facility_id: string; category: string; description: string | null; amount: number; expense_date: string; created_at: string; }
@@ -192,12 +192,34 @@ export function useBookingsByCourt(courtId?: string, date?: string) {
     queryFn: async () => {
       if (!courtId || !date) return [];
       
+      // 1. Buscamos a qué grupo físico pertenece la cancha actual
+      const { data: currentCourt } = await supabase.from("courts").select("shared_group_id").eq("id", courtId).single();
+      
+      let courtIdsToFetch = [courtId];
+
+      if (currentCourt?.shared_group_id) {
+        // 2. Traemos TODAS las canchas para escanear relaciones
+        const { data: allCourts } = await supabase.from("courts").select("id, shared_group_id, linked_court_ids");
+        
+        if (allCourts) {
+          courtIdsToFetch = allCourts.filter(c => 
+            // Condición A: Es un "hermano" (ej: variante Vóley/Fútbol de la misma cancha física)
+            c.shared_group_id === currentCourt.shared_group_id || 
+            // Condición B: Es un Paquete de Evento que tiene a esta cancha física en su lista de bloqueos
+            (c.linked_court_ids && c.linked_court_ids.includes(currentCourt.shared_group_id))
+          ).map(c => c.id);
+        }
+      }
+
       // TRADUCCIÓN UTC
       const startOfDay = new Date(`${date}T00:00:00`).toISOString();
       const endOfDay = new Date(`${date}T23:59:59.999`).toISOString();
 
-      const { data, error } = await supabase.from("bookings").select("*").eq("court_id", courtId)
+      // 3. Traemos TODAS las reservas que choquen con nuestro grupo de IDs
+      const { data, error } = await supabase.from("bookings").select("*")
+        .in("court_id", courtIdsToFetch)
         .gte("start_time", startOfDay).lte("start_time", endOfDay).neq("status", "cancelled");
+        
       if (error) throw error;
       return data as Booking[];
     },
@@ -206,16 +228,39 @@ export function useBookingsByCourt(courtId?: string, date?: string) {
 }
 
 export function generateAvailableSlots(bookings: Booking[], date: string, openHour = 8, closeHour = 23) {
-  const occupiedHours = new Set(bookings.map((b) => new Date(b.start_time).getHours()));
+  const occupiedHours = new Set<number>();
+
+  // Analizamos cada reserva para calcular su duración real
+  bookings.forEach((b) => {
+    const start = new Date(b.start_time);
+    // Si no tiene end_time, asumimos 1 hora por defecto. Si tiene, lo usamos.
+    const end = b.end_time ? new Date(b.end_time) : new Date(start.getTime() + 60 * 60000);
+    
+    let startH = start.getHours();
+    let endH = end.getHours();
+
+    // Ajuste si la reserva termina al día siguiente (ej: de 23:00 a 02:00)
+    if (endH <= startH && endH >= 0) {
+        endH += 24;
+    }
+
+    // Agregamos TODAS las horas que dura la reserva a la lista de "ocupadas"
+    for (let h = startH; h < endH; h++) {
+        occupiedHours.add(h % 24);
+    }
+  });
+
   const slots: { time: string; available: boolean }[] = [];
   
   for (let h = openHour; h < closeHour; h++) {
     const displayH = h % 24; 
     slots.push({ 
       time: `${displayH.toString().padStart(2, "0")}:00`, 
+      // Si la hora está en el Set de horas ocupadas, la marcamos como no disponible
       available: !occupiedHours.has(displayH) 
     });
   }
+  
   return slots;
 }
 
