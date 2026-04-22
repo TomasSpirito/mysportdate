@@ -443,34 +443,42 @@ const AdminSettings = () => {
                 <div className="space-y-4">
                     <div>
                         <label className="text-xs font-semibold text-muted-foreground block mb-1">Nombre del complejo</label>
-                        <input type="text" value={facilityForm.name} onChange={(e) => setFacilityForm({ ...facilityForm, name: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none transition-all" />
+                        <input type="text" value={facilityForm.name || ''} onChange={(e) => setFacilityForm({ ...facilityForm, name: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none transition-all" />
                     </div>
                     <div>
                         <label className="text-xs font-semibold text-muted-foreground block mb-1">Descripción corta ("Sobre nosotros")</label>
-                        <textarea value={facilityForm.description} onChange={(e) => setFacilityForm({ ...facilityForm, description: e.target.value })} rows={3} placeholder="Bienvenidos a nuestro club..." className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none transition-all resize-none" />
+                        <textarea value={facilityForm.description || ''} onChange={(e) => setFacilityForm({ ...facilityForm, description: e.target.value })} rows={3} placeholder="Bienvenidos a nuestro club..." className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none transition-all resize-none" />
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label className="text-xs font-semibold text-muted-foreground block mb-1 flex items-center gap-1"><MapPin className="w-3 h-3" /> Dirección exacta</label>
-                            <input type="text" value={facilityForm.location} onChange={(e) => setFacilityForm({ ...facilityForm, location: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary outline-none" />
+                            <input type="text" value={facilityForm.location || ''} onChange={(e) => setFacilityForm({ ...facilityForm, location: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary outline-none" />
                         </div>
                         <div>
                             <label className="text-xs font-semibold text-muted-foreground block mb-1 flex items-center gap-1"><Map className="w-3 h-3" /> Link de Google Maps</label>
-                            <input type="url" placeholder="https://maps.app.goo.gl/..." value={facilityForm.maps_url} onChange={(e) => setFacilityForm({ ...facilityForm, maps_url: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary outline-none" />
+                            <input type="url" placeholder="https://maps.app.goo.gl/..." value={facilityForm.maps_url || ''} onChange={(e) => setFacilityForm({ ...facilityForm, maps_url: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary outline-none" />
                         </div>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    
+                    {/* Grilla cambiada a 2 columnas para acomodar los 4 elementos de contacto */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label className="text-xs font-semibold text-muted-foreground block mb-1 flex items-center gap-1"><MessageCircle className="w-3 h-3" /> WhatsApp</label>
-                            <input type="text" value={facilityForm.whatsapp} onChange={(e) => setFacilityForm({ ...facilityForm, whatsapp: e.target.value })} placeholder="5491112345678" className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary outline-none" />
+                            <input type="text" value={facilityForm.whatsapp || ''} onChange={(e) => setFacilityForm({ ...facilityForm, whatsapp: e.target.value })} placeholder="5491112345678" className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary outline-none" />
                         </div>
                         <div>
                             <label className="text-xs font-semibold text-muted-foreground block mb-1 flex items-center gap-1"><Instagram className="w-3 h-3" /> Instagram</label>
-                            <input type="text" placeholder="@tu_club" value={facilityForm.instagram_url} onChange={(e) => setFacilityForm({ ...facilityForm, instagram_url: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary outline-none" />
+                            <input type="text" placeholder="@tu_club" value={facilityForm.instagram_url || ''} onChange={(e) => setFacilityForm({ ...facilityForm, instagram_url: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary outline-none" />
                         </div>
                         <div>
                             <label className="text-xs font-semibold text-muted-foreground block mb-1 flex items-center gap-1"><Phone className="w-3 h-3" /> Teléfono Fijo</label>
-                            <input type="tel" value={facilityForm.phone} onChange={(e) => setFacilityForm({ ...facilityForm, phone: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary outline-none" />
+                            <input type="tel" value={facilityForm.phone || ''} onChange={(e) => setFacilityForm({ ...facilityForm, phone: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary outline-none" />
+                        </div>
+                        
+                        {/* --- NUEVO CAMPO DE EMAIL --- */}
+                        <div>
+                            <label className="text-xs font-semibold text-muted-foreground block mb-1 flex items-center gap-1"><Mail className="w-3 h-3" /> Email de Notificaciones</label>
+                            <input type="email" placeholder="recepcion@tuclub.com" value={facilityForm.email || ''} onChange={(e) => setFacilityForm({ ...facilityForm, email: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:border-primary outline-none" />
                         </div>
                     </div>
                 </div>

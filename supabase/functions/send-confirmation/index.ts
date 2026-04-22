@@ -18,12 +18,12 @@ serve(async (req) => {
       return new Response(JSON.stringify({ message: "No es una confirmación" }), { status: 200 });
     }
 
-    // 1. Nos conectamos a la base de datos desde la función
+    // 1. Nos conectamos a la base de datos
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // 2. Buscamos el nombre de la cancha y los datos del predio
+    // 2. Buscamos los datos de la cancha y AGREGAMOS EL EMAIL DEL PREDIO ('email')
     const { data: courtData, error: courtError } = await supabase
       .from("courts")
       .select(`
@@ -33,7 +33,8 @@ serve(async (req) => {
           location,
           phone,
           whatsapp,
-          cancellation_window_hours
+          cancellation_window_hours,
+          email
         )
       `)
       .eq("id", record.court_id)
@@ -43,7 +44,7 @@ serve(async (req) => {
 
     const facility = courtData.facilities;
     
-    // Ajuste de hora restando 3 horas para que el mail diga la hora argentina correcta
+    // Ajuste de hora argentina
     const dateObj = new Date(record.start_time);
     dateObj.setHours(dateObj.getHours() - 3);
     const formattedDate = dateObj.toISOString().split('T')[0];
@@ -51,13 +52,12 @@ serve(async (req) => {
 
     const cancelLink = `https://mysportdate-test.vercel.app/cancelar/${record.cancellation_token}`;
 
-    // 3. Armamos un mail súper completo
-    const res = await fetch("https://api.resend.com/emails", {
+    // ==========================================
+    // 3A. ENVÍO DE EMAIL AL CLIENTE (JUGADOR)
+    // ==========================================
+    const resCustomer = await fetch("https://api.resend.com/emails", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-      },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${RESEND_API_KEY}` },
       body: JSON.stringify({
         from: "MySportdate <onboarding@resend.dev>",
         to: [record.user_email],
@@ -93,10 +93,73 @@ serve(async (req) => {
       }),
     });
 
-    const data = await res.json();
-    return new Response(JSON.stringify(data), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const dataCustomer = await resCustomer.json();
 
-  } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    // ==========================================
+    // 3B. ENVÍO DE EMAIL AL ADMINISTRADOR (ACTUALIZADO: VERDE + BOTÓN)
+    // ==========================================
+    if (facility.email && record.booking_type === "online") {
+      // Usamos una variable de entorno FRONTEND_URL (que configurarás en Supabase) o caemos en la de test por defecto
+    const baseUrl = Deno.env.get("FRONTEND_URL") ?? "https://mysportdate-test.vercel.app";
+    
+    // Le pasamos la fecha exacta como parámetro en la URL
+    const adminDashboardLink = `${baseUrl}/admin?date=${formattedDate}`;
+
+      await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${RESEND_API_KEY}` },
+        body: JSON.stringify({
+          from: "MySportdate Notificaciones <onboarding@resend.dev>",
+          to: [facility.email],
+          subject: `🎉 Nueva Reserva Online: ${record.user_name} - ${formattedDate}`, 
+          html: `
+            <div style="font-family: sans-serif; max-width: 600px; margin: auto; border: 1px solid #e2e8f0; padding: 20px; border-radius: 12px; background-color: #ffffff;">
+              
+              <div style="background-color: #16a34a; color: white; padding: 20px; border-radius: 10px; text-align: center; margin-bottom: 25px;">
+                <h2 style="margin: 0; font-size: 22px;">¡Nueva Reserva Recibida!</h2>
+                <p style="margin: 5px 0 0 0; font-size: 14px; opacity: 0.9;">Un cliente acaba de reservar por la web</p>
+              </div>
+              
+              <h3 style="color: #334155; margin-bottom: 12px; border-bottom: 2px solid #f1f5f9; padding-bottom: 8px;">📋 Datos del Turno</h3>
+              <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
+                <tr><td style="padding: 10px 0; border-bottom: 1px solid #f8fafc;"><strong>Cancha:</strong></td><td style="padding: 10px 0; border-bottom: 1px solid #f8fafc; text-align: right;">${courtData.name}</td></tr>
+                <tr><td style="padding: 10px 0; border-bottom: 1px solid #f8fafc;"><strong>Fecha:</strong></td><td style="padding: 10px 0; border-bottom: 1px solid #f8fafc; text-align: right;">${formattedDate}</td></tr>
+                <tr><td style="padding: 10px 0; border-bottom: 1px solid #f8fafc;"><strong>Horario:</strong></td><td style="padding: 10px 0; border-bottom: 1px solid #f8fafc; text-align: right;">${formattedTime} hs</td></tr>
+                <tr><td style="padding: 10px 0; border-bottom: 1px solid #f8fafc;"><strong>Total a Cobrar:</strong></td><td style="padding: 10px 0; border-bottom: 1px solid #f8fafc; text-align: right; color: #16a34a; font-weight: bold;">$${record.total_price}</td></tr>
+                <tr><td style="padding: 10px 0;"><strong>Seña Abonada:</strong></td><td style="padding: 10px 0; text-align: right; color: #16a34a; font-weight: bold;">$${record.deposit_amount}</td></tr>
+              </table>
+
+              <h3 style="color: #334155; margin-bottom: 12px; border-bottom: 2px solid #f1f5f9; padding-bottom: 8px;">👤 Datos del Cliente</h3>
+              <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 30px;">
+                <p style="margin: 5px 0;"><strong>Nombre:</strong> ${record.user_name}</p>
+                <p style="margin: 5px 0;"><strong>Teléfono:</strong> <a href="https://wa.me/${record.user_phone?.replace(/[^0-9]/g, '')}" style="color: #16a34a; text-decoration: none; font-weight: bold;">${record.user_phone}</a></p>
+                <p style="margin: 5px 0;"><strong>Email:</strong> ${record.user_email}</p>
+              </div>
+
+              <div style="text-align: center;">
+                <a href="${adminDashboardLink}" style="display: inline-block; background-color: #16a34a; color: white; padding: 14px 28px; border-radius: 10px; text-decoration: none; font-weight: bold; font-size: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                  Ver reserva en el calendario
+                </a>
+              </div>
+
+              <div style="margin-top: 30px; text-align: center; border-top: 1px solid #f1f5f9; padding-top: 20px;">
+                <p style="font-size: 11px; color: #94a3b8; margin: 0;">Notificación enviada automáticamente por MySportdate</p>
+              </div>
+            </div>
+          `,
+        }),
+      });
+    }
+
+    return new Response(JSON.stringify({ success: true, customer: dataCustomer }), { 
+      status: 200, 
+      headers: { ...corsHeaders, "Content-Type": "application/json" } 
+    });
+
+  } catch (error: any) {
+    return new Response(JSON.stringify({ error: error.message }), { 
+      status: 500, 
+      headers: { ...corsHeaders, "Content-Type": "application/json" } 
+    });
   }
 });

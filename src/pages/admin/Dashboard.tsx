@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { useFacility, useCourts, useSports, useBookings, useCancelledBookings, useCreateBooking, useUpdateBooking, useDeleteBooking, useFacilitySchedules, useHolidays, type Booking, type Court } from "@/hooks/use-supabase-data";
 import { cn } from "@/lib/utils";
@@ -6,6 +6,7 @@ import { format, addDays, getDay } from "date-fns";
 import { es } from "date-fns/locale";
 import { ChevronLeft, ChevronRight, X, Phone, Mail, CalendarCheck, AlertCircle, CreditCard, Banknote, SmartphoneNfc } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { useSearchParams } from "react-router-dom";
 
 const typeLabels: Record<string, string> = { online: "Online", fixed: "Fijo", manual: "Manual" };
 
@@ -16,8 +17,27 @@ const PAYMENT_METHODS = [
 ];
 
 const AdminDashboard = () => {
+  const [searchParams] = useSearchParams();
   const today = new Date();
-  const [selectedDate, setSelectedDate] = useState(today);
+  // Estado inicial inteligente: Si hay ?date en la URL, usa esa fecha. Si no, usa HOY.
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const urlDate = searchParams.get("date");
+    if (urlDate) {
+      // Le agregamos T12:00:00 para evitar que el ajuste de zona horaria nos mueva al día anterior
+      return new Date(`${urlDate}T12:00:00`); 
+    }
+    return today; // <--- Y acá aprovechamos y usamos la variable 'today'
+  });
+  // --- NUEVO: Escudo protector de parámetros ---
+  // Si la URL cambia o se re-renderiza después del login, forzamos la fecha.
+  useEffect(() => {
+    const urlDate = searchParams.get("date");
+    if (urlDate) {
+      setSelectedDate(new Date(`${urlDate}T12:00:00`));
+    }
+  }, [searchParams]);
+  // ---------------------------------------------
+
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   
   // CORRECCIÓN 1: manualSlot ahora guarda "pc" (la columna entera) en lugar de "courtId"
