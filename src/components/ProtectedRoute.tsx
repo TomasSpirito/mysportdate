@@ -4,16 +4,42 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { FacilityProvider } from "@/contexts/FacilityContext";
 import { Loader2 } from "lucide-react";
+import SubscriptionGate from "@/components/SubscriptionGate";
+
+interface FacilityAccess {
+  id: string;
+  hasAccess: boolean;
+  subscriptionStatus: string | null;
+  trialEndsAt: string | null;
+}
 
 const ProtectedRoute = () => {
   const { user, loading: authLoading } = useAuth();
 
-  const { data: facilityId, isLoading: facilityLoading } = useQuery({
+  const { data: facilityAccess, isLoading: facilityLoading } = useQuery<FacilityAccess | null>({
     queryKey: ["user-facility", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_user_facility_id" as any, { p_user_id: user!.id });
+      const { data: facilityId, error } = await supabase.rpc("get_user_facility_id" as any, {
+        p_user_id: user!.id,
+      });
       if (error) throw error;
-      return data as string | null;
+      if (!facilityId) return null;
+
+      const [accessResult, facilityResult] = await Promise.all([
+        supabase.rpc("facility_has_access" as any, { p_facility_id: facilityId }),
+        supabase
+          .from("facilities")
+          .select("subscription_status, trial_ends_at")
+          .eq("id", facilityId as string)
+          .single(),
+      ]);
+
+      return {
+        id: facilityId as string,
+        hasAccess: (accessResult.data as boolean) ?? false,
+        subscriptionStatus: facilityResult.data?.subscription_status ?? null,
+        trialEndsAt: facilityResult.data?.trial_ends_at ?? null,
+      };
     },
     enabled: !!user,
   });
@@ -28,7 +54,7 @@ const ProtectedRoute = () => {
 
   if (!user) return <Navigate to="/auth/login" replace />;
 
-  if (!facilityId) {
+  if (!facilityAccess?.id) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center p-6">
@@ -40,8 +66,15 @@ const ProtectedRoute = () => {
   }
 
   return (
-    <FacilityProvider facilityId={facilityId}>
-      <Outlet />
+    <FacilityProvider facilityId={facilityAccess.id}>
+      {facilityAccess.hasAccess ? (
+        <Outlet />
+      ) : (
+        <SubscriptionGate
+          subscriptionStatus={facilityAccess.subscriptionStatus}
+          trialEndsAt={facilityAccess.trialEndsAt}
+        />
+      )}
     </FacilityProvider>
   );
 };

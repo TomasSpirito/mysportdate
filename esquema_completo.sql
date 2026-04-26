@@ -99,7 +99,9 @@ CREATE OR REPLACE FUNCTION "public"."create_facility_for_user"("p_name" "text") 
     AS $$
 DECLARE new_id uuid;
 BEGIN
-  INSERT INTO public.facilities (name, owner_id) VALUES (p_name, auth.uid()) RETURNING id INTO new_id;
+  INSERT INTO public.facilities (name, owner_id, trial_ends_at, subscription_status)
+  VALUES (p_name, auth.uid(), now() + interval '14 days', 'trial')
+  RETURNING id INTO new_id;
   INSERT INTO public.user_roles (user_id, role, facility_id) VALUES (auth.uid(), 'admin', new_id);
   FOR i IN 0..6 LOOP
     INSERT INTO public.facility_schedules (facility_id, day_of_week, is_open) VALUES (new_id, i, true);
@@ -168,6 +170,28 @@ $$;
 
 
 ALTER FUNCTION "public"."is_facility_admin"("_user_id" "uuid", "_facility_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."facility_has_access"("p_facility_id" "uuid") RETURNS boolean
+    LANGUAGE "plpgsql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+DECLARE
+  v_status            text;
+  v_trial_ends_at     timestamptz;
+  v_subscription_exp  timestamptz;
+BEGIN
+  SELECT subscription_status, trial_ends_at, subscription_expires_at
+  INTO   v_status, v_trial_ends_at, v_subscription_exp
+  FROM   public.facilities WHERE id = p_facility_id;
+  IF NOT FOUND THEN RETURN false; END IF;
+  IF v_status = 'active' AND (v_subscription_exp IS NULL OR v_subscription_exp > now()) THEN RETURN true; END IF;
+  IF v_status = 'trial' AND v_trial_ends_at IS NOT NULL AND v_trial_ends_at > now() THEN RETURN true; END IF;
+  RETURN false;
+END; $$;
+
+
+ALTER FUNCTION "public"."facility_has_access"("p_facility_id" "uuid") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."revert_stock_on_expense_delete"() RETURNS "trigger"
@@ -429,7 +453,11 @@ CREATE TABLE IF NOT EXISTS "public"."facilities" (
     "holiday_open_time" time without time zone DEFAULT '12:00:00'::time without time zone,
     "holiday_close_time" time without time zone DEFAULT '23:00:00'::time without time zone,
     "event_open_time" time without time zone DEFAULT '12:00:00'::time without time zone,
-    "event_close_time" time without time zone DEFAULT '23:00:00'::time without time zone
+    "event_close_time" time without time zone DEFAULT '23:00:00'::time without time zone,
+    "trial_ends_at" timestamp with time zone,
+    "subscription_status" "text" DEFAULT 'trial'::"text",
+    "subscription_expires_at" timestamp with time zone,
+    CONSTRAINT "facilities_subscription_status_check" CHECK (("subscription_status" = ANY (ARRAY['trial'::"text", 'active'::"text", 'expired'::"text", 'cancelled'::"text"])))
 );
 
 
@@ -1049,6 +1077,12 @@ GRANT USAGE ON SCHEMA "public" TO "service_role";
 
 
 
+
+
+
+GRANT ALL ON FUNCTION "public"."facility_has_access"("p_facility_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."facility_has_access"("p_facility_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."facility_has_access"("p_facility_id" "uuid") TO "service_role";
 
 
 

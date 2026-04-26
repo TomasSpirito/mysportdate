@@ -7,8 +7,9 @@ import {
   Coffee, ArrowRight, Phone, Mail, HelpCircle, XCircle, AlertTriangle, Star,
   AlertCircle, UserCircle, Zap, TrendingUp, PieChart, Clock, Sparkles,
   ChevronDown, Receipt, Ban, CircleDollarSign, FileBarChart, ShieldAlert,
-  Smartphone, Globe, HeartHandshake, BadgeCheck, Minus, Plus
+  Smartphone, Globe, HeartHandshake, BadgeCheck, Minus, Plus, Loader2
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 /* ── Animation helpers ── */
 const fadeUp = {
@@ -119,7 +120,10 @@ const MiniStat = ({ icon: Icon, label, value, color, className = "" }: { icon: a
 const Landing = () => {
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [formStatus, setFormStatus] = useState<"idle" | "sent">("idle");
+  const [formStatus, setFormStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [facilityName, setFacilityName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const constraintsRef = useRef(null);
 
   const { scrollYProgress } = useScroll();
@@ -130,10 +134,22 @@ const Landing = () => {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const handleContactSubmit = (e: React.FormEvent) => {
+  const handleContactSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setFormStatus("sent");
-    setTimeout(() => setFormStatus("idle"), 4000);
+    setFormStatus("sending");
+    try {
+      const { error } = await supabase.functions.invoke("send-demo-request", {
+        body: { facilityName, phone, email },
+      });
+      if (error) throw error;
+      setFormStatus("sent");
+      setFacilityName("");
+      setPhone("");
+      setEmail("");
+    } catch {
+      setFormStatus("error");
+      setTimeout(() => setFormStatus("idle"), 5000);
+    }
   };
 
   return (
@@ -569,24 +585,58 @@ const Landing = () => {
                     <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-8 rounded-2xl text-center">
                       <CheckCircle2 className="w-14 h-14 mx-auto mb-4" />
                       <h3 className="text-lg font-black mb-2">¡Datos enviados!</h3>
-                      <p className="font-medium text-sm text-emerald-400/70">Nos contactaremos con vos a la brevedad.</p>
+                      <p className="font-medium text-sm text-emerald-400/70">Te contactamos a la brevedad por WhatsApp.</p>
                     </div>
                   ) : (
                     <form onSubmit={handleContactSubmit} className="space-y-3.5 bg-white/[0.03] border border-white/[0.06] p-6 sm:p-7 rounded-2xl backdrop-blur-sm">
                       <div className="relative">
                         <Users className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600" />
-                        <input type="text" required placeholder="Nombre del complejo" className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl pl-11 pr-4 py-3 font-semibold text-sm outline-none focus:border-emerald-500/40 transition-colors text-white placeholder:text-slate-600" />
+                        <input
+                          type="text" required
+                          placeholder="Nombre del complejo"
+                          value={facilityName}
+                          onChange={(e) => setFacilityName(e.target.value)}
+                          disabled={formStatus === "sending"}
+                          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl pl-11 pr-4 py-3 font-semibold text-sm outline-none focus:border-emerald-500/40 transition-colors text-white placeholder:text-slate-600 disabled:opacity-50"
+                        />
                       </div>
                       <div className="relative">
                         <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600" />
-                        <input type="tel" required placeholder="WhatsApp (con código de área)" className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl pl-11 pr-4 py-3 font-semibold text-sm outline-none focus:border-emerald-500/40 transition-colors text-white placeholder:text-slate-600" />
+                        <input
+                          type="tel" required
+                          placeholder="WhatsApp (con código de área)"
+                          value={phone}
+                          onChange={(e) => setPhone(e.target.value)}
+                          disabled={formStatus === "sending"}
+                          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl pl-11 pr-4 py-3 font-semibold text-sm outline-none focus:border-emerald-500/40 transition-colors text-white placeholder:text-slate-600 disabled:opacity-50"
+                        />
                       </div>
                       <div className="relative">
                         <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600" />
-                        <input type="email" required placeholder="Tu email" className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl pl-11 pr-4 py-3 font-semibold text-sm outline-none focus:border-emerald-500/40 transition-colors text-white placeholder:text-slate-600" />
+                        <input
+                          type="email" required
+                          placeholder="Tu email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          disabled={formStatus === "sending"}
+                          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl pl-11 pr-4 py-3 font-semibold text-sm outline-none focus:border-emerald-500/40 transition-colors text-white placeholder:text-slate-600 disabled:opacity-50"
+                        />
                       </div>
-                      <button type="submit" className="w-full bg-emerald-500 text-white py-3.5 rounded-xl font-black text-sm hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20 mt-1">
-                        Solicitar Demo Gratuita
+                      {formStatus === "error" && (
+                        <p className="text-xs text-red-400 font-semibold text-center">
+                          Hubo un error al enviar. Intentá de nuevo o escribinos por WhatsApp.
+                        </p>
+                      )}
+                      <button
+                        type="submit"
+                        disabled={formStatus === "sending"}
+                        className="w-full bg-emerald-500 text-white py-3.5 rounded-xl font-black text-sm hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20 mt-1 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                      >
+                        {formStatus === "sending" ? (
+                          <><Loader2 size={16} className="animate-spin" /> Enviando...</>
+                        ) : (
+                          "Solicitar Demo Gratuita"
+                        )}
                       </button>
                     </form>
                   )}
