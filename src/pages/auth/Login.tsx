@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -8,11 +8,49 @@ import { AuthError } from "@supabase/supabase-js";
 const Login = () => {
   const navigate = useNavigate();
   const [isRegister, setIsRegister] = useState(false);
-  const [isForgotPassword, setIsForgotPassword] = useState(false); // NUEVO ESTADO
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [facilityName, setFacilityName] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // ═══ NUEVO: INTERCEPTOR DE AUTO-LOGIN (Click en el mail) ═══
+  useEffect(() => {
+    const handleAutoLogin = async () => {
+      // Si la persona acaba de confirmar su mail, rescatamos el nombre del predio y lo creamos
+      const pendingFacility = localStorage.getItem("pendingFacilityName");
+      
+      if (pendingFacility) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error: rpcError } = await supabase.rpc("create_facility_for_user" as any, { p_name: pendingFacility });
+          if (!rpcError) {
+            localStorage.removeItem("pendingFacilityName");
+          }
+        } catch (e) {
+          console.error("Error creando el predio post-confirmación", e);
+        }
+      }
+      
+      // Una vez creado (o si ya existía), lo mandamos directo al admin sin que ponga su clave de nuevo
+      navigate("/admin");
+    };
+
+    // 1. Chequeo rápido: ¿La URL ya trae la sesión iniciada?
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) handleAutoLogin();
+    });
+
+    // 2. Escuchador en tiempo real: Detecta el momento exacto en que Supabase lee el token de la URL
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" && session) {
+        handleAutoLogin();
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+  // ════════════════════════════════════════════════════════════
 
   const handleError = (err: unknown) => {
     if (err instanceof Error || err instanceof AuthError) {
@@ -95,7 +133,6 @@ const Login = () => {
     }
   };
 
-  // NUEVA FUNCION PARA RECUPERAR CONTRASEÑA
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim()) {
@@ -105,7 +142,7 @@ const Login = () => {
     setLoading(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/update-password`, // Lo mandamos a la pantalla nueva
+        redirectTo: `${window.location.origin}/auth/update-password`,
       });
       if (error) throw error;
       toast({ title: "Correo enviado", description: "Revisá tu bandeja de entrada para restablecer tu contraseña.", variant: "default" });
@@ -117,7 +154,6 @@ const Login = () => {
     }
   };
 
-  // Pequeño helper para resetear vistas
   const toggleView = (view: 'register' | 'login' | 'forgot') => {
     if (view === 'register') { setIsRegister(true); setIsForgotPassword(false); }
     if (view === 'login') { setIsRegister(false); setIsForgotPassword(false); }
