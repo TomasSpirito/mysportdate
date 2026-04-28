@@ -511,7 +511,7 @@ const Landing = () => {
 
               <div className="grid md:grid-cols-2 gap-10 items-center">
                 <div className="text-center md:text-left border-b md:border-b-0 md:border-r border-white/[0.06] pb-8 md:pb-0 md:pr-10">
-                  <p className="text-5xl sm:text-6xl font-black mb-2 text-white">$15.000<span className="text-xl text-slate-600 font-semibold">/mes</span></p>
+                  <p className="text-5xl sm:text-6xl font-black mb-2 text-white">$35.000<span className="text-xl text-slate-600 font-semibold">/mes</span></p>
                   <p className="text-sm font-bold text-slate-500 mb-4">Costo fijo. Sin comisiones ocultas.</p>
                   <p className="text-xs text-slate-600 font-medium">Cancelá cuando quieras, sin contratos.</p>
                 </div>
@@ -552,7 +552,7 @@ const Landing = () => {
           <RevealSection className="space-y-3">
             <FaqItem q="¿Tengo que instalar algo en mi PC?" a="¡Para nada! MySportdate funciona 100% en la nube. Entrás desde cualquier navegador en tu PC o celular. No necesitás descargar nada." />
             <FaqItem q="¿Qué pasa si ya tengo reservas anotadas?" a="Podés pasarlas fácilmente usando el módulo de carga manual o los Turnos Fijos. No perdés nada de tu historial." />
-            <FaqItem q="¿Cobran comisión por reserva?" a="No. Solo pagás el costo fijo mensual de $15.000. Las señas que cobres van directo a tu cuenta de Mercado Pago, sin intermediarios." />
+            <FaqItem q="¿Cobran comisión por reserva?" a="No. Solo pagás el costo fijo mensual de $35.000. Las señas que cobres van directo a tu cuenta de Mercado Pago, sin intermediarios." />
             <FaqItem q="¿Puedo gestionar más de un deporte?" a="¡Sí! Podés configurar fútbol, pádel, tenis, básquet o lo que necesites. Cada cancha se asocia al deporte correspondiente." />
             <FaqItem q="¿Qué soporte ofrecen?" a="Tenés soporte ilimitado por WhatsApp de lunes a lunes. Te ayudamos a configurar todo y resolver cualquier duda en minutos." />
           </RevealSection>
@@ -656,13 +656,14 @@ const Landing = () => {
           </div>
           <div className="flex gap-6 text-xs font-semibold text-slate-600">
             <span>© {new Date().getFullYear()} MySportdate</span>
-            <a href="mailto:contacto@mysportdate.com" className="hover:text-emerald-400 transition-colors">contacto@mysportdate.com</a>
+            <a href="mailto:mysportdate@gmail.com" className="hover:text-emerald-400 transition-colors">mysportdate@gmail.com</a>
           </div>
         </div>
       </footer>
 
       {/* ═══ FLOATING WHATSAPP ═══ */}
-      <a href="https://wa.me/5491100000000" target="_blank" rel="noopener noreferrer"
+      <a href="https://wa.me/5491151586219?text=Hola!%20Estoy%20interesado%20en%20MySportdate%20y%20me%20gustar%C3%ADa%20saber%20m%C3%A1s." 
+        target="_blank" rel="noopener noreferrer"
         className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-[#25D366] rounded-full flex items-center justify-center shadow-lg shadow-[#25D366]/30 hover:scale-110 hover:shadow-xl hover:shadow-[#25D366]/40 transition-all"
         aria-label="Contactar por WhatsApp">
         <MessageCircle className="text-white fill-white" size={26} />

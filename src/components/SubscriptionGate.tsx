@@ -79,7 +79,7 @@ const SubscriptionGate = ({ subscriptionStatus, trialEndsAt }: Props) => {
         {/* Price */}
         <div className="bg-white/[0.04] border border-white/[0.07] rounded-2xl p-5 mb-6">
           <p className="text-4xl font-black text-white mb-1">
-            $15.000
+            $35.000
             <span className="text-base text-slate-500 font-semibold">/mes</span>
           </p>
           <p className="text-xs text-slate-500 font-medium">
@@ -89,7 +89,7 @@ const SubscriptionGate = ({ subscriptionStatus, trialEndsAt }: Props) => {
 
         {/* CTA */}
         <a
-          href="https://wa.me/5491100000000?text=Hola!%20Quiero%20activar%20mi%20suscripci%C3%B3n%20a%20MySportdate"
+          href="https://wa.me/5491151586219?text=Hola!%20Quiero%20activar%20mi%20suscripci%C3%B3n%20a%20MySportdate"
           target="_blank"
           rel="noopener noreferrer"
           className="w-full flex items-center justify-center gap-2 py-4 rounded-xl font-black text-sm text-white transition-all shadow-lg"
@@ -101,8 +101,8 @@ const SubscriptionGate = ({ subscriptionStatus, trialEndsAt }: Props) => {
 
         <p className="mt-4 text-xs text-slate-600 font-medium">
           También podés escribirnos a{" "}
-          <a href="mailto:contacto@mysportdate.com" className="text-emerald-500 hover:underline">
-            contacto@mysportdate.com
+          <a href="mailto:mysportdate@gmail.com" className="text-emerald-500 hover:underline">
+            mysportdate@gmail.com
           </a>
         </p>
       </motion.div>

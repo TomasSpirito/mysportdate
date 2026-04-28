@@ -42,6 +42,8 @@ const ProtectedRoute = () => {
       };
     },
     enabled: !!user,
+    refetchInterval: 1000 * 60 * 5, // Vuelve a preguntar a Supabase cada 5 minutos en segundo plano
+    refetchOnWindowFocus: true, // Vuelve a preguntar instantáneamente si el usuario cambia de pestaña y vuelve a la app
   });
 
   if (authLoading || (user && facilityLoading)) {

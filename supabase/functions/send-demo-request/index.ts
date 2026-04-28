@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-const ADMIN_EMAIL = Deno.env.get("DEMO_REQUESTS_EMAIL") ?? "contacto@mysportdate.com";
+const ADMIN_EMAIL = Deno.env.get("DEMO_REQUESTS_EMAIL") ?? "mysportdate@gmail.com";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -109,7 +109,7 @@ serve(async (req) => {
 
               <p style="color: #64748b; font-size: 13px;">
                 ¿Tenés alguna pregunta mientras tanto? Escribinos directamente a
-                <a href="mailto:contacto@mysportdate.com" style="color: #059669;">contacto@mysportdate.com</a>
+                <a href="mailto:mysportdate@gmail.com" style="color: #059669;">mysportdate@gmail.com</a>
               </p>
             </div>
             <div style="background: #f8fafc; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0;">

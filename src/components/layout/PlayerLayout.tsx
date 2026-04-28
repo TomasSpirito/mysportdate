@@ -83,7 +83,7 @@ const PlayerLayout = ({ children, title, showBack = false, backTo }: PlayerLayou
             <a href="#" className="hover:text-primary transition-colors">Términos</a>
             <a href="#" className="hover:text-primary transition-colors">Privacidad</a>
             <a href="#" className="hover:text-primary transition-colors">Soporte</a>
-            <a href="mailto:contacto@mysportdate.com" className="hover:text-primary transition-colors">contacto@mysportdate.com</a>
+            <a href="mailto:mysportdate@gmail.com" className="hover:text-primary transition-colors">mysportdate@gmail.com</a>
           </div>
 
           <div className="text-xs text-muted-foreground text-center md:text-right">
